@@ -573,7 +573,6 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 <!-- ═══ STATUS BAR ═══ -->
 <div class="status-bar">
   <div class="status-left"><div class="sdot" id="sdot"></div><span id="stext">Connecting...</span></div>
-  <button class="btn btn-outline btn-sm" onclick="loadFromSheet()">⟳ Refresh</button>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ -->
@@ -654,9 +653,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   <div class="report-asof" id="rpt-asof"></div>
 
   <div class="month-bar">
-    <label>Filter by Month</label>
-    <input type="month" id="rpt-month" onchange="renderReport()">
-    <button class="btn btn-outline btn-sm" onclick="document.getElementById('rpt-month').value='';renderReport()">Show All</button>
+    <button class="btn btn-primary btn-sm" onclick="loadFromSheet()">⟳ Refresh from Sheet</button>
   </div>
 
   <div class="kpi-row">
@@ -808,6 +805,11 @@ async function loadFromSheet(){
     if(json.status==='ok'){
       rows=json.data.map(r=>({...r,gl:String(r.gl),sal:+r.sal,cg:+r.cg,saldmg:+r.saldmg,cutdmg:+r.cutdmg,total:+r.total,yield:+r.total>0?(+r.sal/+r.total)*100:0}));
       rebuildEntry();
+      // Re-render report and charts if their pages are active, or always keep data fresh
+      const reportPage=document.getElementById('page-report');
+      if(reportPage&&reportPage.classList.contains('active')) renderReport();
+      const chartsPage=document.getElementById('page-charts');
+      if(chartsPage&&chartsPage.classList.contains('active')) buildCharts();
       setStatus('✓ Synced — '+rows.length+' records','ok');
     }else setStatus('⚠ '+json.message,'err');
   }catch(e){setStatus('✗ Network error — check connection','err');}
@@ -862,13 +864,10 @@ function resetEntry(){
 
 /* CUMULATIVE REPORT */
 function renderReport(){
-  const pick=document.getElementById('rpt-month').value;
-  const filtered=pick?rows.filter(r=>r.date&&r.date.startsWith(pick)):[...rows];
-  const label=pick?new Date(pick+'-01').toLocaleString('default',{month:'long',year:'numeric'}):'All Time';
-  document.getElementById('rpt-title').textContent=label+' — Production Yield Cumulative Analysis';
-  const dates=filtered.map(r=>r.date).filter(Boolean).sort();
-  const asof=dates.length?dates[dates.length-1]:'—';
-  document.getElementById('rpt-asof').textContent='As at '+formatDate(asof);
+  const filtered=[...rows];
+  document.getElementById('rpt-title').textContent='Production Yield Cumulative Analysis';
+  const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
+  document.getElementById('rpt-asof').textContent='As at '+today;
   const rt=filtered.reduce((s,r)=>s+r.total,0),rs=filtered.reduce((s,r)=>s+r.sal,0),
         rc=filtered.reduce((s,r)=>s+r.cg,0),rd=filtered.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),ry=rt>0?rs/rt*100:0;
   document.getElementById('rk-total').textContent=fmt(rt);
@@ -1003,7 +1002,6 @@ window.onload=()=>{
   document.getElementById('f-date').value=new Date().toISOString().slice(0,10);
   updateHeaderTitle();
   const now=new Date();
-  document.getElementById('rpt-month').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   loadFromSheet();
   setInterval(loadFromSheet,60000);
 };
