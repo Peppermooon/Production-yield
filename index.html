@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tile Production Yield Analysis System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════ */
+:root {
+  --bg:        #f0f4f9;
+  --surface:   #ffffff;
+  --surface2:  #f5f7fb;
+  --border:    #dce2ed;
+  --accent:    #0DD171;
+  --accent2:   #09b85e;
+  --text:      #1a1f2e;
+  --muted:     #5a6480;
+  --ok:        #22c55e;
+  --danger:    #ef4444;
+  --warning:   #f97316;
+  --head:      'DM Sans', sans-serif;
+  --body:      'DM Sans', sans-serif;
+  /* Report table colours – kept from original */
+  --tbl-header:#0DD171;
+  --tbl-sub:   #eafaf2;
+  --tbl-pink:  #f3e8ff;
+  --tbl-orange:#fff3e8;
+  --tbl-green: #e8f9f0;
+}
+
+/* ═══════════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════════ */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 14px;
+  font-weight: 400;
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c5cde0; border-radius: 99px; }
+
+/* ═══════════════════════════════════════════════
+   SITE HEADER
+═══════════════════════════════════════════════ */
+.site-header {
+  background: linear-gradient(135deg, #087a40 0%, #0DD171 55%, #0a9e56 100%);
+  height: 80px;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 3px 18px rgba(7,122,64,.30);
+}
+.site-header h1 {
+  font-family: var(--head);
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: .2px;
+  text-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.site-header .subtitle {
+  font-family: var(--body);
+  font-size: 12px;
+  font-weight: 300;
+  color: rgba(255,255,255,.72);
+  margin-top: 2px;
+  letter-spacing: .3px;
+}
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--body);
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,.85);
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 20px;
+  padding: 6px 14px;
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(34,197,94,.25);
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* ═══════════════════════════════════════════════
+   NAV BAR
+═══════════════════════════════════════════════ */
+.nav-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  display: flex;
+  position: sticky;
+  top: 80px;
+  z-index: 99;
+  box-shadow: 0 2px 8px rgba(7,80,45,.06);
+}
+.nav-btn {
+  padding: 14px 22px;
+  border: none;
+  background: none;
+  font-family: var(--head);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  transition: color .2s, border-color .2s;
+}
+.nav-btn:hover  { color: var(--accent); }
+.nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ═══════════════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════════════ */
+.status-bar {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  padding: 7px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--body);
+  font-size: 12px;
+}
+.status-left { display:flex; align-items:center; gap:8px; color:var(--muted); }
+.sdot { width:7px; height:7px; border-radius:50%; background:#aaa; flex-shrink:0; transition:background .3s; }
+.sdot.ok   { background:var(--ok); }
+.sdot.err  { background:var(--danger); }
+.sdot.spin { background:var(--accent); animation:pulse 1s infinite; }
+
+/* ═══════════════════════════════════════════════
+   PAGES & LAYOUT
+═══════════════════════════════════════════════ */
+.page { display: none; }
+.page.active { display: block; }
+.container { max-width: 1500px; margin: 0 auto; padding: 28px 32px; }
+.rpt-container { max-width: 1100px; margin: 0 auto; padding: 28px 32px; }
+
+/* ═══════════════════════════════════════════════
+   SECTION LABEL  (title + fading line)
+═══════════════════════════════════════════════ */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--head);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--border), transparent);
+}
+
+/* ═══════════════════════════════════════════════
+   CARDS
+═══════════════════════════════════════════════ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 16px rgba(7,80,45,.10);
+}
+.card-title {
+  font-family: var(--head);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title::before {
+  content: '';
+  display: inline-block;
+  width: 4px; height: 18px;
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  border-radius: 2px;
+}
+
+/* ═══════════════════════════════════════════════
+   FORM
+═══════════════════════════════════════════════ */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+.form-group label {
+  display: block;
+  font-family: var(--body);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.form-group input,
+.form-group select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 13px;
+  font-family: var(--body);
+  font-size: 14px;
+  font-weight: 400;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+  -webkit-appearance: none;
+}
+.form-group input:focus,
+.form-group select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(13,209,113,.12);
+  background: #fff;
+}
+.form-group select option { background: #fff; }
+.auto-field {
+  background: #eafff4 !important;
+  color: #087a40 !important;
+  border-color: #a0eeca !important;
+  cursor: default;
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════════ */
+.btn {
+  padding: 10px 22px;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity .2s, transform .15s;
+  white-space: nowrap;
+}
+.btn:hover  { opacity: .88; }
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-danger  { background: var(--danger); color: #fff; }
+.btn-outline {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.btn-outline:hover { background: var(--surface2); opacity: 1; }
+.btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 6px; }
+
+/* ═══════════════════════════════════════════════
+   KPI ROW
+═══════════════════════════════════════════════ */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 2px 16px rgba(7,80,45,.08);
+  position: relative;
+  overflow: hidden;
+}
+.kpi::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+.kpi-label {
+  font-family: var(--body);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.kpi-value {
+  font-family: var(--head);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+.kpi-value.ok   { color: var(--ok); }
+.kpi-value.warn { color: var(--warning); }
+.kpi-value.bad  { color: var(--danger); }
+
+/* ═══════════════════════════════════════════════
+   DATA TABLE
+═══════════════════════════════════════════════ */
+.table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 260px;
+  border-radius: 8px;
+}
+table.data-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.data-tbl thead tr th {
+  background: #eafaf2;
+  font-family: var(--head);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+table.data-tbl td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(220,226,237,.6);
+  font-family: var(--body);
+  font-size: 13px;
+  white-space: nowrap;
+}
+table.data-tbl tbody tr:hover td { background: #f0f5ff; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.yield-ok   { color: var(--ok);      font-weight: 600; }
+.yield-warn { color: var(--warning); font-weight: 600; }
+.yield-bad  { color: var(--danger);  font-weight: 700; }
+.row-bad td { background: rgba(239,68,68,.04) !important; }
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════
+   CHARTS
+═══════════════════════════════════════════════ */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.charts-grid .full { grid-column: 1 / -1; }
+.chart-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 16px rgba(7,80,45,.08);
+}
+.chart-box canvas { max-height: 180px; }
+.chart-title {
+  font-family: var(--head);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chart-title::before {
+  content: '';
+  width: 3px; height: 14px;
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   REPORT PAGE
+═══════════════════════════════════════════════ */
+.report-title {
+  font-family: var(--head);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: 4px;
+}
+.report-asof {
+  font-family: var(--body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--danger);
+  font-style: italic;
+  text-align: center;
+  margin-bottom: 20px;
+}
+.month-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.month-bar label {
+  font-family: var(--body);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.month-bar input[type=month] {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: var(--body);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+  cursor: pointer;
+}
+.month-bar input[type=month]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(13,209,113,.12);
+}
+
+/* Report section blocks */
+.section-block { margin-bottom: 28px; }
+
+/* Report table */
+table.rpt { width:100%; border-collapse:collapse; font-size:13px; border:1.5px solid var(--border); border-radius:8px; overflow:hidden; }
+tr.rpt-section-hdr td {
+  background: linear-gradient(135deg, #087a40, #0DD171);
+  color:#fff;
+  font-family:var(--head);
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  text-align:center;
+  padding:10px 12px;
+  border:none;
+}
+tr.rpt-col-hdr th {
+  background: #eafaf2;
+  color: var(--accent);
+  font-family: var(--head);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+table.rpt td { padding:8px 12px; border:1px solid rgba(220,226,237,.6); vertical-align:middle; font-family:var(--body); }
+table.rpt td.rkey  { font-weight:600; text-align:center; background:#fff; color:var(--text); }
+table.rpt td.ryld  { text-align:right; font-weight:700; font-family:var(--body); position:relative; padding-left:22px; }
+table.rpt td.ryld::before { content:'▲'; position:absolute; left:7px; font-size:9px; color:var(--ok); }
+table.rpt td.ryld.low { color:var(--danger); }
+table.rpt td.ryld.low::before { content:'▼'; color:var(--danger); }
+table.rpt td.rcg   { background:var(--tbl-pink);   text-align:right; font-family:var(--body); }
+table.rpt td.rdmg  { background:var(--tbl-orange);  text-align:right; font-family:var(--body); color:#b84a00; }
+table.rpt td.rcsal { background:var(--tbl-green);   text-align:right; font-family:var(--body); }
+table.rpt td.rccd  { background:var(--tbl-pink);    text-align:right; font-family:var(--body); }
+table.rpt td.rcdmg { background:var(--tbl-orange);  text-align:right; font-family:var(--body); color:#b84a00; }
+table.rpt td.rctot { background:#eafaf2; text-align:right; font-weight:700; font-family:var(--body); color:var(--accent); }
+tr.rpt-total td    { background:#eafaf2; font-weight:700; font-family:var(--head); font-size:13px; border:1px solid var(--border); color:var(--accent); }
+tr.rpt-total td.rcg  { background:#e8d5f5; }
+tr.rpt-total td.rdmg { background:#fde8d4; }
+tr.rpt-total td.rcsal{ background:#d0f4e2; }
+tr.rpt-total td.rccd { background:#e8d5f5; }
+tr.rpt-total td.rcdmg{ background:#fde8d4; }
+tr.rpt-total td.rctot{ background:#b8f5d8; }
+tr.rpt-empty td { text-align:center; color:#aaa; font-style:italic; padding:20px; background:#fafcff; }
+table.rpt tbody tr:hover td { filter: brightness(.97); }
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .site-header { padding: 0 16px; }
+  .nav-bar { padding: 0 16px; }
+  .status-bar { padding: 7px 16px; }
+  .container, .rpt-container { padding: 20px 16px; }
+  .charts-grid { grid-template-columns: 1fr; }
+  .charts-grid .full { grid-column: 1; }
+  .form-grid { grid-template-columns: repeat(2, 1fr); }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 500px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .kpi-row { grid-template-columns: 1fr 1fr; }
+  .site-header h1 { font-size: 16px; }
+  .nav-btn { padding: 12px 12px; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<header class="site-header">
+  <div>
+    <h1 id="site-title">Production Yield Cumulative Analysis</h1>
+    <div class="subtitle">Manufacturing Quality &amp; Production Intelligence</div>
+  </div>
+  <div class="live-badge"><div class="live-dot"></div>Live · Google Sheets</div>
+</header>
+
+<!-- ═══ NAV ═══ -->
+<nav class="nav-bar">
+  <button class="nav-btn active" id="nav-entry"  onclick="showPage('entry',this)">Data Entry</button>
+  <button class="nav-btn"        id="nav-report" onclick="showPage('report',this)">Cumulative Report</button>
+  <button class="nav-btn"        id="nav-charts" onclick="showPage('charts',this)">Charts</button>
+</nav>
+
+<!-- ═══ STATUS BAR ═══ -->
+<div class="status-bar">
+  <div class="status-left"><div class="sdot" id="sdot"></div><span id="stext">Connecting...</span></div>
+  <button class="btn btn-outline btn-sm" onclick="loadFromSheet()">⟳ Refresh</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PAGE 1 — DATA ENTRY                                   -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="page active" id="page-entry">
+<div class="container">
+
+  <div class="card">
+    <div class="card-title">Data Entry</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Date</label><input type="date" id="f-date" onchange="updateHeaderTitle()"></div>
+      <div class="form-group"><label>Type</label>
+        <input type="text" id="f-type" placeholder="e.g. FAY123" style="text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase();updateAuto()">
+      </div>
+      <div class="form-group"><label>GL</label>
+        <select id="f-gl" onchange="updateAuto()">
+          <option value="">Select GL</option>
+          <option>1</option><option>2</option><option>5</option><option>6</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Size (auto)</label><input type="text" id="f-size" class="auto-field" readonly></div>
+      <div class="form-group"><label>Category (auto)</label><input type="text" id="f-cat" class="auto-field" readonly></div>
+      <div class="form-group"><label>Texture (auto)</label><input type="text" id="f-tex" class="auto-field" readonly></div>
+      <div class="form-group"><label>Kiln (auto)</label><input type="text" id="f-kiln" class="auto-field" readonly></div>
+      <div class="form-group"><label>Saleable Prod.</label><input type="number" id="f-sal" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
+      <div class="form-group"><label>C Grade Prod.</label><input type="number" id="f-cgrade" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
+      <div class="form-group"><label>Saleable Damage</label><input type="number" id="f-saldmg" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
+      <div class="form-group"><label>Cut &amp; Damage</label><input type="number" id="f-cutdmg" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
+      <div class="form-group"><label>Total Prod. (auto)</label><input type="text" id="f-total" class="auto-field" readonly></div>
+      <div class="form-group"><label>Yield % (auto)</label><input type="text" id="f-yield" class="auto-field" readonly></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;gap:10px">
+        <button class="btn btn-primary" id="btn-add" onclick="addRow()">+ Add Entry</button>
+        <button class="btn btn-outline btn-sm" onclick="clearForm()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Total Production</div><div class="kpi-value" id="kpi-total">—</div></div>
+    <div class="kpi"><div class="kpi-label">Saleable Production</div><div class="kpi-value" id="kpi-sal">—</div></div>
+    <div class="kpi"><div class="kpi-label">Overall Yield %</div><div class="kpi-value" id="kpi-yield">—</div></div>
+    <div class="kpi"><div class="kpi-label">C Grade</div><div class="kpi-value" id="kpi-cg">—</div></div>
+    <div class="kpi"><div class="kpi-label">Total Damages</div><div class="kpi-value" id="kpi-dmg">—</div></div>
+    <div class="kpi"><div class="kpi-label">Active GLs</div><div class="kpi-value" id="kpi-gls">—</div></div>
+  </div>
+
+  <!-- Entries Table -->
+  <div class="section-label">All Entries</div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="table-wrap">
+      <table class="data-tbl">
+        <thead><tr>
+          <th>Date</th><th>Type</th><th>GL</th><th>Size</th><th>Cat.</th><th>Tex.</th><th>Kiln</th>
+          <th class="num">Saleable</th><th class="num">C Grade</th>
+          <th class="num">Sal.Dmg</th><th class="num">Cut&amp;Dmg</th>
+          <th class="num">Total</th><th class="num">Yield %</th><th>Del</th>
+        </tr></thead>
+        <tbody id="entries-body">
+          <tr><td colspan="14" class="empty-state">No data yet — add entries above</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PAGE 2 — CUMULATIVE REPORT                            -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="page" id="page-report">
+<div class="rpt-container">
+
+  <div class="report-title" id="rpt-title">— Production Yield Cumulative Analysis</div>
+  <div class="report-asof" id="rpt-asof"></div>
+
+  <div class="month-bar">
+    <label>Filter by Month</label>
+    <input type="month" id="rpt-month" onchange="renderReport()">
+    <button class="btn btn-outline btn-sm" onclick="document.getElementById('rpt-month').value='';renderReport()">Show All</button>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Total Production</div><div class="kpi-value" id="rk-total">—</div></div>
+    <div class="kpi"><div class="kpi-label">Saleable</div><div class="kpi-value" id="rk-sal">—</div></div>
+    <div class="kpi"><div class="kpi-label">Overall Yield</div><div class="kpi-value" id="rk-yield">—</div></div>
+    <div class="kpi"><div class="kpi-label">C Grade</div><div class="kpi-value" id="rk-cg">—</div></div>
+    <div class="kpi"><div class="kpi-label">Total Damage</div><div class="kpi-value" id="rk-dmg">—</div></div>
+  </div>
+
+  <div id="rpt-body"></div>
+
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PAGE 3 — CHARTS                                       -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="page" id="page-charts">
+<div class="container">
+
+  <div class="section-label">Yield Charts</div>
+
+  <div class="charts-grid">
+    <div class="chart-box full">
+      <div class="chart-title">Daily GL Yield Trend</div>
+      <canvas id="chart-trend" style="max-height:220px"></canvas>
+    </div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-box"><div class="chart-title">GL-Wise Yield %</div><canvas id="chart-gl"></canvas></div>
+    <div class="chart-box"><div class="chart-title">Kiln-Wise Yield %</div><canvas id="chart-kiln"></canvas></div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-box"><div class="chart-title">Texture-Wise Yield %</div><canvas id="chart-tex"></canvas></div>
+    <div class="chart-box"><div class="chart-title">Production Breakdown</div><canvas id="chart-breakdown"></canvas></div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT  (logic unchanged)                         -->
+<!-- ══════════════════════════════════════════════════════ -->
+<script>
+const SHEET_URL='https://script.google.com/macros/s/AKfycbweD7rEQdPcJWv-v7YjMH7kg3yRQPGmdHuCoNvVbT9EB__9TM5yR8sxDVHLz82OOFNu/exec';
+let rows=[];
+
+/* NAV */
+function showPage(name,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  btn.classList.add('active');
+  if(name==='charts') buildCharts();
+  if(name==='report') renderReport();
+}
+
+/* STATUS */
+function setStatus(msg,type='idle'){
+  document.getElementById('stext').textContent=msg;
+  const d=document.getElementById('sdot');
+  d.className='sdot'+(type==='ok'?' ok':type==='err'?' err':type==='spin'?' spin':'');
+}
+
+/* DERIVED LOGIC */
+function deriveSize(t){
+  if(!t)return'';
+  const u=t.toUpperCase(),p=(t.endsWith('1')||t.endsWith('P'))?'P':'';
+  if(u.startsWith('FAR'))return'600×1200'+p;
+  if(u.startsWith('FAE'))return'800×1200'+p;
+  if(u.startsWith('FAS'))return'800×800'+p;
+  if(u.startsWith('FAA'))return'300×300'+p;
+  if(u.startsWith('FAP'))return'600×300'+p;
+  if(u.startsWith('FAX'))return'500×500';
+  if(u.startsWith('FAY'))return'600×600'+p;
+  return'—';
+}
+function deriveCat(t){if(!t)return'';const u=t.toUpperCase();return(u.includes('CERA')||u.includes('FCLT'))?'Ceramics':'Porcelain';}
+function deriveTex(t){return t?t.slice(-1):'';}
+function deriveKiln(gl){if(gl=='1'||gl=='2')return'Kiln 04';if(gl=='5')return'Kiln 03';if(gl=='6')return'Kiln 05';return'—';}
+
+/* FORM AUTO */
+function updateAuto(){
+  const t=document.getElementById('f-type').value,gl=document.getElementById('f-gl').value;
+  document.getElementById('f-size').value=deriveSize(t);
+  document.getElementById('f-cat').value=deriveCat(t);
+  document.getElementById('f-tex').value=deriveTex(t);
+  document.getElementById('f-kiln').value=deriveKiln(gl);
+  updateAutoCalc();
+}
+function updateAutoCalc(){
+  const s=+document.getElementById('f-sal').value||0,c=+document.getElementById('f-cgrade').value||0,
+        sd=+document.getElementById('f-saldmg').value||0,cd=+document.getElementById('f-cutdmg').value||0,tot=s+c+sd+cd;
+  document.getElementById('f-total').value=tot;
+  document.getElementById('f-yield').value=tot>0?((s/tot)*100).toFixed(2)+'%':'0.00%';
+}
+
+/* ADD ROW */
+async function addRow(){
+  const date=document.getElementById('f-date').value,
+        type=document.getElementById('f-type').value.toUpperCase().trim(),
+        gl=document.getElementById('f-gl').value,
+        sal=+document.getElementById('f-sal').value||0,
+        cg=+document.getElementById('f-cgrade').value||0,
+        saldmg=+document.getElementById('f-saldmg').value||0,
+        cutdmg=+document.getElementById('f-cutdmg').value||0;
+  if(!date||!type||!gl){alert('Date, Type and GL are required.');return;}
+  const total=sal+cg+saldmg+cutdmg;
+  if(!total){alert('Enter at least one production quantity.');return;}
+  const btn=document.getElementById('btn-add');
+  btn.textContent='Saving…';btn.disabled=true;
+  const row={id:Date.now(),date,type,gl,size:deriveSize(type),cat:deriveCat(type),tex:deriveTex(type),kiln:deriveKiln(gl),sal,cg,saldmg,cutdmg,total,yield:total>0?(sal/total)*100:0};
+  try{
+    setStatus('Saving to Google Sheets…','spin');
+    const res=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify({action:'add',...row})});
+    const json=await res.json();
+    if(json.status==='ok'){rows.push(row);rebuildEntry();clearForm();setStatus('✓ Saved — '+rows.length+' records','ok');}
+    else setStatus('⚠ '+json.message,'err');
+  }catch(e){setStatus('✗ Network error','err');}
+  btn.textContent='+ Add Entry';btn.disabled=false;
+}
+
+/* DELETE */
+async function deleteRow(id){
+  if(!confirm('Delete this entry?'))return;
+  setStatus('Deleting…','spin');
+  try{
+    const res=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify({action:'delete',id})});
+    const json=await res.json();
+    if(json.status==='ok'){rows=rows.filter(r=>r.id!==id);rebuildEntry();setStatus('✓ Deleted — '+rows.length+' records','ok');}
+    else setStatus('⚠ '+json.message,'err');
+  }catch(e){setStatus('✗ Network error','err');}
+}
+
+/* CLEAR FORM */
+function clearForm(){
+  ['f-type','f-sal','f-cgrade','f-saldmg','f-cutdmg'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-gl').value='';
+  ['f-size','f-cat','f-tex','f-kiln','f-total','f-yield'].forEach(id=>document.getElementById(id).value='');
+}
+
+/* LOAD FROM SHEET */
+async function loadFromSheet(){
+  setStatus('Loading from Google Sheets…','spin');
+  try{
+    const res=await fetch(SHEET_URL);
+    const json=await res.json();
+    if(json.status==='ok'){
+      rows=json.data.map(r=>({...r,gl:String(r.gl),sal:+r.sal,cg:+r.cg,saldmg:+r.saldmg,cutdmg:+r.cutdmg,total:+r.total,yield:+r.total>0?(+r.sal/+r.total)*100:0}));
+      rebuildEntry();
+      setStatus('✓ Synced — '+rows.length+' records','ok');
+    }else setStatus('⚠ '+json.message,'err');
+  }catch(e){setStatus('✗ Network error — check connection','err');}
+}
+
+/* HELPERS */
+function fmt(n){return Number(n).toLocaleString();}
+function fmtP(n){return Number(n).toFixed(2)+'%';}
+function yc(y){return y>=95?'ok':y>=90?'warn':'bad';}
+function ycls(y){return y>=95?'yield-ok':y>=90?'yield-warn':'yield-bad';}
+
+function aggRows(arr,keyFn){
+  const map={};
+  arr.forEach(r=>{
+    const k=keyFn(r);if(k===null||k===undefined||k==='')return;
+    if(!map[k])map[k]={key:k,sal:0,cg:0,saldmg:0,cutdmg:0,total:0};
+    map[k].sal+=r.sal;map[k].cg+=r.cg;map[k].saldmg+=r.saldmg;map[k].cutdmg+=r.cutdmg;map[k].total+=r.total;
+  });
+  return Object.values(map).map(g=>({...g,damage:g.saldmg+g.cutdmg,
+    yield:g.total>0?g.sal/g.total*100:0,
+    cgPct:g.total>0?g.cg/g.total*100:0,
+    dmgPct:g.total>0?(g.saldmg+g.cutdmg)/g.total*100:0}));
+}
+
+/* REBUILD ENTRY PAGE */
+function rebuildEntry(){
+  if(!rows.length){resetEntry();return;}
+  const tot=rows.reduce((s,r)=>s+r.total,0),sal=rows.reduce((s,r)=>s+r.sal,0),
+        cg=rows.reduce((s,r)=>s+r.cg,0),dmg=rows.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),
+        yld=tot>0?(sal/tot)*100:0,gls=new Set(rows.map(r=>r.gl)).size;
+  document.getElementById('kpi-total').textContent=fmt(tot);
+  document.getElementById('kpi-sal').textContent=fmt(sal);
+  document.getElementById('kpi-cg').textContent=fmt(cg);
+  document.getElementById('kpi-dmg').textContent=fmt(dmg);
+  document.getElementById('kpi-gls').textContent=gls;
+  const ye=document.getElementById('kpi-yield');ye.textContent=fmtP(yld);ye.className='kpi-value '+yc(yld);
+  const sorted=[...rows].sort((a,b)=>a.date<b.date?-1:1);
+  document.getElementById('entries-body').innerHTML=sorted.map(r=>`
+    <tr class="${r.yield<90?'row-bad':''}">
+      <td>${r.date}</td><td>${r.type}</td><td>${r.gl}</td><td>${r.size}</td><td>${r.cat}</td><td>${r.tex}</td><td>${r.kiln}</td>
+      <td class="num">${fmt(r.sal)}</td><td class="num">${fmt(r.cg)}</td>
+      <td class="num">${fmt(r.saldmg)}</td><td class="num">${fmt(r.cutdmg)}</td>
+      <td class="num">${fmt(r.total)}</td>
+      <td class="num ${ycls(r.yield)}">${fmtP(r.yield)}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteRow(${r.id})">✕</button></td>
+    </tr>`).join('');
+}
+function resetEntry(){
+  ['kpi-total','kpi-sal','kpi-yield','kpi-cg','kpi-dmg','kpi-gls'].forEach(id=>document.getElementById(id).textContent='—');
+  document.getElementById('entries-body').innerHTML='<tr><td colspan="14" class="empty-state">No data yet — add entries above</td></tr>';
+}
+
+/* CUMULATIVE REPORT */
+function renderReport(){
+  const pick=document.getElementById('rpt-month').value;
+  const filtered=pick?rows.filter(r=>r.date&&r.date.startsWith(pick)):[...rows];
+  const label=pick?new Date(pick+'-01').toLocaleString('default',{month:'long',year:'numeric'}):'All Time';
+  document.getElementById('rpt-title').textContent=label+' — Production Yield Cumulative Analysis';
+  const dates=filtered.map(r=>r.date).filter(Boolean).sort();
+  const asof=dates.length?dates[dates.length-1]:'—';
+  document.getElementById('rpt-asof').textContent='As at '+formatDate(asof);
+  const rt=filtered.reduce((s,r)=>s+r.total,0),rs=filtered.reduce((s,r)=>s+r.sal,0),
+        rc=filtered.reduce((s,r)=>s+r.cg,0),rd=filtered.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),ry=rt>0?rs/rt*100:0;
+  document.getElementById('rk-total').textContent=fmt(rt);
+  document.getElementById('rk-sal').textContent=fmt(rs);
+  document.getElementById('rk-cg').textContent=fmt(rc);
+  document.getElementById('rk-dmg').textContent=fmt(rd);
+  const rye=document.getElementById('rk-yield');rye.textContent=fmtP(ry);rye.className='kpi-value '+yc(ry);
+  if(!filtered.length){document.getElementById('rpt-body').innerHTML='<div style="text-align:center;padding:60px;color:var(--muted);">No data for selected period.</div>';return;}
+  const glG=aggRows(filtered,r=>'GL '+r.gl);
+  const szG=aggRows(filtered,r=>r.size);
+  const tyG=aggRows(filtered,r=>`GL ${r.gl} ${r.size} ${r.cat}`);
+  const txG=aggRows(filtered,r=>r.tex);
+  const knG=aggRows(filtered,r=>r.kiln);
+  document.getElementById('rpt-body').innerHTML=
+    buildRptTable('GL Wise Yield',glG,'GL')+
+    buildRptTable('Size Wise Yield',szG,'Size')+
+    buildRptTable('Type Wise Yield — Ceramic / Porcelain',tyG,'GL / Type')+
+    buildRptTable('Texture Wise Yield',txG,'Texture')+
+    buildRptTable('Kiln Wise Yield',knG,'Kiln No');
+}
+function formatDate(d){if(!d||d==='—')return'—';return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});}
+
+function buildRptTable(title,groups,keyLabel){
+  const sorted=groups.sort((a,b)=>String(a.key)<String(b.key)?-1:1);
+  if(!sorted.length)return`<div class="section-block"><div class="table-wrap"><table class="rpt">
+    <tr class="rpt-section-hdr"><td colspan="8">${title}</td></tr>
+    <tr class="rpt-col-hdr"><th>${keyLabel}</th><th>Yield</th><th>C Grade %</th><th>Damage %</th><th>Cum Sal</th><th>Cum C</th><th>Cum D</th><th>Total</th></tr>
+    <tr class="rpt-empty"><td colspan="8">No data for this period</td></tr>
+  </table></div></div>`;
+  const tot={sal:sorted.reduce((s,g)=>s+g.sal,0),cg:sorted.reduce((s,g)=>s+g.cg,0),damage:sorted.reduce((s,g)=>s+g.damage,0),total:sorted.reduce((s,g)=>s+g.total,0)};
+  tot.yield=tot.total>0?tot.sal/tot.total*100:0;
+  tot.cgPct=tot.total>0?tot.cg/tot.total*100:0;
+  tot.dmgPct=tot.total>0?tot.damage/tot.total*100:0;
+  return`<div class="section-block"><div class="table-wrap"><table class="rpt">
+    <tr class="rpt-section-hdr"><td colspan="8">${title}</td></tr>
+    <tr class="rpt-col-hdr"><th>${keyLabel}</th><th>Yield</th><th>C Grade %</th><th>Damage %</th><th>Cum Sal</th><th>Cum C</th><th>Cum D</th><th>Total</th></tr>
+    ${sorted.map(g=>`<tr>
+      <td class="rkey">${g.key}</td>
+      <td class="ryld ${g.yield<90?'low':''}">${fmtP(g.yield)}</td>
+      <td class="rcg">${fmtP(g.cgPct)}</td>
+      <td class="rdmg">${fmtP(g.dmgPct)}</td>
+      <td class="rcsal">${fmt(g.sal)}</td>
+      <td class="rccd">${fmt(g.cg)}</td>
+      <td class="rcdmg">${fmt(g.damage)}</td>
+      <td class="rctot">${fmt(g.total)}</td>
+    </tr>`).join('')}
+    <tr class="rpt-total">
+      <td style="text-align:center">TOTAL</td>
+      <td class="ryld ${tot.yield<90?'low':''}">${fmtP(tot.yield)}</td>
+      <td class="rcg">${fmtP(tot.cgPct)}</td>
+      <td class="rdmg">${fmtP(tot.dmgPct)}</td>
+      <td class="rcsal">${fmt(tot.sal)}</td>
+      <td class="rccd">${fmt(tot.cg)}</td>
+      <td class="rcdmg">${fmt(tot.damage)}</td>
+      <td class="rctot">${fmt(tot.total)}</td>
+    </tr>
+  </table></div></div>`;
+}
+
+/* CHARTS */
+const charts={};
+const COLORS=['#0DD171','#09b85e','#ef4444','#22c55e','#f97316','#06b6d4','#f59e0b'];
+const cCfg={
+  responsive:true,maintainAspectRatio:true,
+  plugins:{
+    legend:{labels:{color:'#5a6480',font:{family:"'DM Sans'",size:11,weight:'500'}}},
+    tooltip:{backgroundColor:'#fff',titleColor:'#0DD171',bodyColor:'#1a1f2e',borderColor:'#dce2ed',borderWidth:1,cornerRadius:8,padding:10}
+  },
+  scales:{
+    x:{ticks:{color:'#5a6480',font:{family:"'DM Sans'",size:11}},grid:{color:'rgba(220,226,237,.5)'}},
+    y:{ticks:{color:'#5a6480',font:{family:"'DM Sans'",size:11},callback:v=>v+'%'},grid:{color:'rgba(220,226,237,.5)'}}
+  }
+};
+function makeBar(id,labels,data){
+  const ctx=document.getElementById(id);if(!ctx)return;
+  if(charts[id])charts[id].destroy();
+  const bg=data.map(v=>v<90?'#ef4444':v<95?'#f97316':'#22c55e');
+  charts[id]=new Chart(ctx,{type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:bg,borderRadius:6,borderSkipped:false}]},
+    options:{...cCfg,plugins:{...cCfg.plugins,legend:{display:false}},scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
+}
+function buildCharts(){
+  if(!rows.length)return;
+  const glG=aggRows(rows,r=>'GL '+r.gl).sort((a,b)=>a.key<b.key?-1:1);
+  makeBar('chart-gl',glG.map(g=>g.key),glG.map(g=>+g.yield.toFixed(2)));
+  const knG=aggRows(rows,r=>r.kiln).sort((a,b)=>a.key<b.key?-1:1);
+  makeBar('chart-kiln',knG.map(g=>g.key),knG.map(g=>+g.yield.toFixed(2)));
+  const txG=aggRows(rows,r=>r.tex).sort((a,b)=>a.key<b.key?-1:1);
+  makeBar('chart-tex',txG.map(g=>'Tex '+g.key),txG.map(g=>+g.yield.toFixed(2)));
+  const totSal=rows.reduce((s,r)=>s+r.sal,0),totCg=rows.reduce((s,r)=>s+r.cg,0),
+        totSalD=rows.reduce((s,r)=>s+r.saldmg,0),totCutD=rows.reduce((s,r)=>s+r.cutdmg,0);
+  const bCtx=document.getElementById('chart-breakdown');if(!bCtx)return;
+  if(charts['chart-breakdown'])charts['chart-breakdown'].destroy();
+  charts['chart-breakdown']=new Chart(bCtx,{type:'doughnut',
+    data:{labels:['Saleable','C Grade','Sal. Damage','Cut & Damage'],
+          datasets:[{data:[totSal,totCg,totSalD,totCutD],backgroundColor:['#0DD171','#f97316','#09b85e','#ef4444'],borderColor:'#f0f4f9',borderWidth:3}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',
+      plugins:{legend:{position:'bottom',labels:{color:'#5a6480',font:{family:"'DM Sans'",size:12},padding:16}},
+               tooltip:{backgroundColor:'#fff',borderColor:'#dce2ed',borderWidth:1,bodyColor:'#1a1f2e',titleColor:'#0DD171',cornerRadius:8,padding:10}}}});
+  const dates=[...new Set(rows.map(r=>r.date))].sort();
+  const gls=[...new Set(rows.map(r=>r.gl))].sort();
+  const dgMap={};
+  rows.forEach(r=>{const k=r.date+'|'+r.gl;if(!dgMap[k])dgMap[k]={sal:0,total:0};dgMap[k].sal+=r.sal;dgMap[k].total+=r.total;});
+  const tCtx=document.getElementById('chart-trend');if(!tCtx)return;
+  if(charts['chart-trend'])charts['chart-trend'].destroy();
+  charts['chart-trend']=new Chart(tCtx,{type:'line',
+    data:{labels:dates,datasets:gls.map((gl,i)=>({
+      label:'GL '+gl,
+      data:dates.map(d=>{const k=d+'|'+gl;return dgMap[k]&&dgMap[k].total>0?+(dgMap[k].sal/dgMap[k].total*100).toFixed(2):null;}),
+      borderColor:COLORS[i%COLORS.length],backgroundColor:COLORS[i%COLORS.length]+'18',
+      tension:0.35,pointRadius:5,pointHoverRadius:7,borderWidth:2.5,spanGaps:false}))},
+    options:{...cCfg,scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
+}
+
+/* HEADER TITLE */
+function updateHeaderTitle(){
+  const val = document.getElementById('f-date').value;
+  const el  = document.getElementById('site-title');
+  if(val){
+    const d = new Date(val);
+    const formatted = String(d.getDate()).padStart(2,'0') + '-' +
+                      String(d.getMonth()+1).padStart(2,'0') + '-' +
+                      d.getFullYear();
+    el.textContent = 'Production Yield Cumulative Analysis (As at ' + formatted + ')';
+  } else {
+    el.textContent = 'Production Yield Cumulative Analysis';
+  }
+}
+
+/* INIT */
+window.onload=()=>{
+  document.getElementById('f-date').value=new Date().toISOString().slice(0,10);
+  updateHeaderTitle();
+  const now=new Date();
+  document.getElementById('rpt-month').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  loadFromSheet();
+  setInterval(loadFromSheet,60000);
+};
+</script>
+</body>
+</html>
