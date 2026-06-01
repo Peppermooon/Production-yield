@@ -13,6 +13,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -771,7 +772,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 <!-- ═══ HEADER ═══ -->
 <header class="site-header">
   <div>
-    <h1 id="site-title">Production Yield Cumulative Analysis</h1>
+    <h1 id="site-title">Production Yield Summary Analysis</h1>
     <div class="subtitle">Manufacturing Quality &amp; Production Intelligence</div>
   </div>
   <div class="live-badge"><div class="live-dot"></div>Live · Google Sheets</div>
@@ -779,9 +780,10 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 
 <!-- ═══ NAV ═══ -->
 <nav class="nav-bar">
-  <button class="nav-btn active" id="nav-report" onclick="showPage('report',this)">Cumulative Report</button>
+  <button class="nav-btn active" id="nav-report" onclick="showPage('report',this)">Summary Report</button>
   <button class="nav-btn"        id="nav-entry"  onclick="showPage('entry',this)">Data Entry</button>
   <button class="nav-btn"        id="nav-charts" onclick="showPage('charts',this)">Charts</button>
+  <button class="nav-btn"        id="nav-typeyield" onclick="showPage('typeyield',this)">Cumulative Yield of Types</button>
 </nav>
 
 <!-- ═══ STATUS BAR ═══ -->
@@ -872,7 +874,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 <div class="page active" id="page-report">
 <div class="rpt-container">
 
-  <div class="report-title" id="rpt-title">Monthly Production Yield Cumulative Analysis</div>
+  <div class="report-title" id="rpt-title">Monthly Production Yield Summary Analysis</div>
 
   <div class="month-bar">
     <button class="btn btn-primary btn-sm" onclick="loadFromSheet()">⟳ Refresh from Sheet</button>
@@ -921,6 +923,47 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 </div>
 
 <!-- ══════════════════════════════════════════════════════ -->
+<!-- PAGE 4 — CUMULATIVE YIELD OF TYPES                    -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="page" id="page-typeyield">
+<div class="rpt-container">
+
+  <div class="report-title" id="ty-title">Cumulative Yield of Types</div>
+  <div class="report-asof" id="ty-asof"></div>
+
+  <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <input type="text" id="ty-search" placeholder="🔍  Filter by type…"
+      oninput="filterTypeYield()"
+      style="padding:9px 14px;border:1px solid var(--border);border-radius:10px;font-size:13px;width:280px;max-width:100%;background:var(--surface);color:var(--text)">
+    <button class="btn btn-outline btn-sm" onclick="exportTypeYieldExcel()">⬇ Download Excel</button>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data-tbl" id="ty-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Total (SQM)</th>
+          <th>Saleable (SQM)</th>
+          <th>C Grade (SQM)</th>
+          <th>Damage (SQM)</th>
+          <th>Yield %</th>
+          <th>C Grade %</th>
+          <th>Damage %</th>
+          <th>Entries</th>
+        </tr>
+      </thead>
+      <tbody id="ty-body">
+        <tr><td colspan="9" class="empty-state">No data yet — refresh from sheet</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
 <!-- JAVASCRIPT  (logic unchanged)                         -->
 <!-- ══════════════════════════════════════════════════════ -->
 <script>
@@ -937,12 +980,12 @@ function showPage(name,btn,mobId){
   // sync the other nav (desktop or mobile)
   if(mobId){
     // called from mobile tab — also mark desktop nav btn
-    const deskMap={report:'nav-report',entry:'nav-entry',charts:'nav-charts'};
+    const deskMap={report:'nav-report',entry:'nav-entry',charts:'nav-charts',typeyield:'nav-typeyield'};
     const deskBtn=document.getElementById(deskMap[name]);
     if(deskBtn)deskBtn.classList.add('active');
   } else {
     // called from desktop nav — also mark mobile tab
-    const mobMap={report:'mobt-report',entry:'mobt-entry',charts:'mobt-charts'};
+    const mobMap={report:'mobt-report',entry:'mobt-entry',charts:'mobt-charts',typeyield:'mobt-typeyield'};
     const mBtn=document.getElementById(mobMap[name]);
     if(mBtn)mBtn.classList.add('active');
   }
@@ -951,6 +994,7 @@ function showPage(name,btn,mobId){
   if(shell)shell.scrollTop=0;
   if(name==='charts') buildCharts();
   if(name==='report') renderReport();
+  if(name==='typeyield') renderTypeYield();
 }
 
 /* STATUS */
@@ -1051,6 +1095,8 @@ async function loadFromSheet(){
       if(reportPage&&reportPage.classList.contains('active')) renderReport();
       const chartsPage=document.getElementById('page-charts');
       if(chartsPage&&chartsPage.classList.contains('active')) buildCharts();
+      const tyPage=document.getElementById('page-typeyield');
+      if(tyPage&&tyPage.classList.contains('active')) renderTypeYield();
       setStatus('✓ Synced — '+rows.length+' records','ok');
     }else setStatus('⚠ '+json.message,'err');
   }catch(e){setStatus('✗ Network error — check connection','err');}
@@ -1107,7 +1153,7 @@ function resetEntry(){
 function renderReport(){
   const filtered=[...rows];
   const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
-  document.getElementById('rpt-title').textContent='Monthly Production Yield Cumulative Analysis (As at '+today+')';
+  document.getElementById('rpt-title').textContent='Monthly Production Yield Summary Analysis (As at '+today+')';
   const rt=filtered.reduce((s,r)=>s+r.total,0),rs=filtered.reduce((s,r)=>s+r.sal,0),
         rc=filtered.reduce((s,r)=>s+r.cg,0),rd=filtered.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),ry=rt>0?rs/rt*100:0;
   document.getElementById('rk-total').textContent=fmt(rt);
@@ -1234,9 +1280,9 @@ function updateHeaderTitle(){
     const formatted = String(d.getDate()).padStart(2,'0') + '-' +
                       String(d.getMonth()+1).padStart(2,'0') + '-' +
                       d.getFullYear();
-    el.textContent = 'Production Yield Cumulative Analysis (As at ' + formatted + ')';
+    el.textContent = 'Production Yield Summary Analysis (As at ' + formatted + ')';
   } else {
-    el.textContent = 'Production Yield Cumulative Analysis';
+    el.textContent = 'Production Yield Summary Analysis';
   }
 }
 
@@ -1249,6 +1295,83 @@ window.onload=()=>{
   setInterval(loadFromSheet,60000);
 };
 
+
+
+
+/* EXPORT TYPE YIELD TO EXCEL */
+function exportTypeYieldExcel(){
+  if(!tyData||!tyData.length){alert('No data to export.');return;}
+  const fmt=v=>v?parseFloat(v.toFixed(2)):0;
+  const fmtP=v=>v?parseFloat(v.toFixed(1)):0;
+  const wsData=[
+    ['Type','Total (SQM)','Saleable (SQM)','C Grade (SQM)','Damage (SQM)','Yield %','C Grade %','Damage %','Entries'],
+    ...tyData.map(d=>{
+      const yld=d.total>0?d.sal/d.total*100:0;
+      const cgp=d.total>0?d.cg/d.total*100:0;
+      const dmp=d.total>0?d.dmg/d.total*100:0;
+      return [d.type,fmt(d.total),fmt(d.sal),fmt(d.cg),fmt(d.dmg),fmtP(yld),fmtP(cgp),fmtP(dmp),d.count];
+    })
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  // column widths
+  ws['!cols']=[{wch:22},{wch:14},{wch:16},{wch:14},{wch:14},{wch:10},{wch:12},{wch:12},{wch:10}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,'Cumulative Yield',ws);
+  const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
+  XLSX.writeFile(wb,'Cumulative_Yield_Types_'+today+'.xlsx');
+}
+
+/* CUMULATIVE YIELD OF TYPES */
+let tyData=[];
+function renderTypeYield(){
+  const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
+  document.getElementById('ty-title').textContent='Cumulative Yield of Types';
+  document.getElementById('ty-asof').textContent='As at '+today;
+  // aggregate by type
+  const map={};
+  rows.forEach(r=>{
+    const t=r.type||'—';
+    if(!map[t])map[t]={type:t,total:0,sal:0,cg:0,dmg:0,count:0};
+    map[t].total+=+r.total||0;
+    map[t].sal+=+r.sal||0;
+    map[t].cg+=+r.cg||0;
+    map[t].dmg+=(+r.saldmg||0)+(+r.cutdmg||0);
+    map[t].count++;
+  });
+  tyData=Object.values(map).sort((a,b)=>a.type.localeCompare(b.type));
+  renderTypeYieldTable(tyData);
+}
+function renderTypeYieldTable(data){
+  const fmt=v=>v?v.toFixed(2):'0.00';
+  const fmtP=v=>v?v.toFixed(1)+'%':'0.0%';
+  const body=document.getElementById('ty-body');
+  if(!data.length){
+    body.innerHTML='<tr><td colspan="9" class="empty-state">No data found</td></tr>';
+    return;
+  }
+  body.innerHTML=data.map(d=>{
+    const yld=d.total>0?d.sal/d.total*100:0;
+    const cgp=d.total>0?d.cg/d.total*100:0;
+    const dmp=d.total>0?d.dmg/d.total*100:0;
+    const yc=yld>=90?'pos':yld>=75?'warn':'neg';
+    return `<tr>
+      <td style="font-family:monospace;font-size:12px">${d.type}</td>
+      <td>${fmt(d.total)}</td>
+      <td>${fmt(d.sal)}</td>
+      <td>${fmt(d.cg)}</td>
+      <td>${fmt(d.dmg)}</td>
+      <td><span class="badge ${yc}">${fmtP(yld)}</span></td>
+      <td>${fmtP(cgp)}</td>
+      <td>${fmtP(dmp)}</td>
+      <td style="text-align:center">${d.count}</td>
+    </tr>`;
+  }).join('');
+}
+function filterTypeYield(){
+  const q=document.getElementById('ty-search').value.trim().toUpperCase();
+  if(!q){renderTypeYieldTable(tyData);return;}
+  renderTypeYieldTable(tyData.filter(d=>d.type.includes(q)));
+}
 
 /* TYPE AUTOCOMPLETE */
 const TYPE_LIST = ["FAE-ANW---M0079B58", "FAE-NRV---P0238A51", "FAE-NRV---P0238B51", "FAE-PDM---P0075A51", "FAE-TTN---M0006D58", "FAP-ATM---X0756C56", "FAP-ENS---X0802D56", "FAP-HMN---X0819C56", "FAP-KTM---X0777C56", "FAP-LAQ---X0828C56", "FAP-LUR---X0859C56", "FAP-MRG---X0817C56", "FAP-PEV---X0951F56", "FAP-RF----X0005-56", "FAP-SEL---X0910F56", "FAR-ABY---P0219A51", "FAR-ALB---P0013F51", "FAR-ALP---P0072A51", "FAR-BSQ---P0010A51", "FAR-CAV---X0112A56", "FAR-CAV---X0112C56", "FAR-GRV---P0004A51", "FAR-HBN---M0007A56", "FAR-INF---P0050A51", "FAR-KZO---P0005A51", "FAR-LAN---P0071A51", "FAR-MET---M0050A56", "FAR-PAS---P0098A51", "FAR-PRI---P0217A51", "FAR-RFC---P0222A51", "FAR-RSQ---P0218A51", "FAR-TTN---M0006A56", "FAR-TTN---M0006Z56", "FAR-TUL---M0001A56", "FAR-WLN---M0008A56", "FAR-WND---P0223A51", "FAS-ALB---P0013A51", "FAS-ARS---M0071A56", "FAS-AUA---P0210A51", "FAS-CHO---P0206A51", "FAS-CLD---P0040A51", "FAS-CLD---P0040B51", "FAS-EHV---P0234A51", "FAS-GRI---P0208A51", "FAS-PEL---P0026B51", "FAS-SHL---P0207A51", "FAS-VNS---M0017A55", "FAS-VNS---M0017B55", "FAS-VNS---P0017B51", "FAX-ARI----0512B52", "FAX-ETR----0574D56", "FAY-ACSD--X0224A56", "FAY-ACSD--X0224B56", "FAY-AFR---X0063A56", "FAY-AGG---X0124A56", "FAY-AME---X0170B52", "FAY-ARC---G0067A52", "FAY-ARC---G0067B52", "FAY-ASP---M0082A56", "FAY-ASP---M0082D56", "FAY-AUR---X0175A52", "FAY-BGA---X0101C52", "FAY-BHS---X0191A52", "FAY-BLD---G0201A52", "FAY-BLS---X0007A52", "FAY-BLS---X0007B52", "FAY-BLS---X0007E52", "FAY-BLS---X0007F52", "FAY-CAM---P0025A51", "FAY-CAM---P0025B51", "FAY-CAO---G0117A52", "FAY-CERA--X0104A52", "FAY-CERA--X0700A52", "FAY-CERA--X0701A52", "FAY-CERA--X0702A52", "FAY-CERA--X0702B52", "FAY-CERA--X0703A56", "FAY-CERA--X0704A56", "FAY-CERA--X0708A52", "FAY-CERA--X0709A52", "FAY-CERA--X0710A52", "FAY-CERA--X0711A52", "FAY-CERA--X0712A52", "FAY-CERA--X0713A56", "FAY-CERA--X0714A56", "FAY-CERA--X0715A56", "FAY-CERA--X0716A56", "FAY-CERA--X0718A52", "FAY-CERA--X0720A52", "FAY-CERA--X0781A56", "FAY-CERA--X0782A52", "FAY-CNR---M0010A56", "FAY-COS---M0043C55", "FAY-COS---M0043D55", "FAY-CRO---P0056A51", "FAY-DES---X0019B52", "FAY-DOK---X0009A57", "FAY-DOK---X0009C56", "FAY-DUNI--X0002A52", "FAY-DUNI--X0003B52", "FAY-DUNI--X0003C52", "FAY-DUNI--X0010A52", "FAY-DUNI--X0014A56", "FAY-DUNI--X0020A52", "FAY-DUNI--X0022A56", "FAY-DUNI--X0030A56", "FAY-DUNI--X0032A56", "FAY-DUNI--X0037A56", "FAY-DUNI--X0037B56", "FAY-DUNI--X0038A52", "FAY-DUNI--X0044A52", "FAY-DUNI--X0045A52", "FAY-DUNI--X0046A52", "FAY-DUNI--X0049A52", "FAY-DUNI--X0049B52", "FAY-DUNI--X0049C52", "FAY-DUNI--X0157A52", "FAY-DUNI--X0161A52", "FAY-DUNI--X0162A52", "FAY-DUNI--X0166A52", "FAY-DUNI--X0167A52", "FAY-DUNI--X0172A56", "FAY-DUNI--X0173A56", "FAY-DUNI--X0176A55", "FAY-DUNI--X0177A55", "FAY-DUNI--X0184A56", "FAY-DUNI--X0187A56", "FAY-DUNI--X0192A56", "FAY-DUNI--X0206A56", "FAY-DUNI--X0208A56", "FAY-DUNI--X0210A52", "FAY-DUNI--X0211A52", "FAY-DUNI--X0216A52", "FAY-ECO---M0122A56", "FAY-ECT---X0132A52", "FAY-FEL---P0049A51", "FAY-FLR---G0115A52", "FAY-FRE---P0048A51", "FAY-FRV---X0174A52", "FAY-GLZ---X0137A52", "FAY-GLZ---X0137B52", "FAY-GLZ---X0137C52", "FAY-GNE---X0108A56", "FAY-GOB---X0123A52", "FAY-GRA---X0022C52", "FAY-GRE---X0110A52", "FAY-GTZ---X0131A52", "FAY-HIL---X0057A52", "FAY-KLD---X0001K56", "FAY-KLD---X0010G52", "FAY-KLD---X0010G56", "FAY-KOZ---X0053A52", "FAY-KUM---X0107A56", "FAY-LMN---X0127A56", "FAY-LMN---X0127B56", "FAY-LMN---X0127F56", "FAY-LMS---X0146A56", "FAY-LSP---X0230A56", "FAY-MAE---P0051A51", "FAY-MDR---M0011A55", "FAY-MDR---M0011B55", "FAY-MDR---P0011E51", "FAY-MFL---X0126A56", "FAY-MIR---P0134A51", "FAY-MOS---M0083A55", "FAY-MOS---M0083A56", "FAY-MOS---M0083A58", "FAY-MOS---M0084C56", "FAY-MOS---X0083A52", "FAY-OEX---X0139A52", "FAY-PASD--X0698B56", "FAY-PAS---P0698A51", "FAY-PRS---G0125A52", "FAY-QRT---M0098C56", "FAY-RDN---X0138A56", "FAY-RMA---X0109A52", "FAY-RSQ---X0189A52", "FAY-RVE---X0104A52", "FAY-SAG---X0085D56", "FAY-SDT---X0214A52", "FAY-SER---X0147B56", "FAY-SHD---X0169A52", "FAY-SHD---X0169B52", "FAY-SLN---X0215A52", "FAY-SLO---X0140A56", "FAY-SMER--G0001A52", "FAY-SND---P0030B51", "FAY-SNY---X0144C56", "FAY-SR----X0104-52", "FAY-SR----X0104-55", "FAY-STT---X0190A52", "FAY-SYK---G0005A52", "FAY-SYK---G0005B52", "FAY-TEK---M0090A56", "FAY-TIN---X0213A52", "FAY-TRQ---X0212A52", "FAY-TRZ---P0087A51", "FAY-URB---X0001E56", "FAY-URB---X0001F56", "FAY-VLRD--X0225A56", "FAY-VLRD--X0225D56", "FAY-VLS---P0206A51", "FAY-VUT---X0165A56", "FAY-WNX---G0119A52", "FAY-ZIR---P0135A51", "FAY-ZIR---X0135A52", "KAFHSQLO---0002A56", "KAFHSQLOBS-0108B52", "KAFHSQLOKA-0109C52", "KAFHSQLOOE-0107A52", "KAFHSQLOWA-0106B52", "FAE-AGA---P0034A51", "FAE-OLM---P0076B51", "FAE-TRL---P0236A51", "FAP-BRC---X0744A56", "FAP-DOK---X0596Q56", "FAP-RF----X0008-56", "FAR-WLN---P0008D51", "FAS-POR---M0092A55", "FAS-SNG---P0205A51", "FAS-VEM---P0039A51", "FAS-VNS---M0017C55", "FAX-SAT----0577B52", "FAX-SNF----0542A55", "FAY-AME---X0170A52", "FAY-BGA---X0101B52", "FAY-BIS---X0141A52", "FAY-CBDT--S0200A56", "FAY-GRA---X0022A52", "FAY-NMT---X0100B52", "FAY-RDN---X0138C57", "FAY-RNS---M0011A55", "FAY-RVE---X0104A56", "FAY-SND---P0030A51", "FAY-TVR---X0118A56", "FAY-URBD--X0001F56", "FAY-VDE---X0145A52", "FAY-VUT---X0165C56", "FAY-ZIR---P0135B51", "KAFHSQLOKA-0109B52", "FAY-CEM---X0098A56", "FAY-CEM---X0098A57"];
@@ -1356,6 +1479,10 @@ async function downloadReportImage(){
   <button class="mob-tab" id="mobt-charts" onclick="showPage('charts',this,'mobt-charts')">
     <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
     <span class="mob-tab-label">Charts</span>
+  </button>
+  <button class="mob-tab" id="mobt-typeyield" onclick="showPage('typeyield',this,'mobt-typeyield')">
+    <svg viewBox="0 0 24 24"><path d="M3 3h18v4H3z"/><path d="M3 10h12v4H3z"/><path d="M3 17h8v4H3z"/></svg>
+    <span class="mob-tab-label">Yield</span>
   </button>
 </nav>
 
