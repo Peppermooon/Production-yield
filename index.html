@@ -1412,18 +1412,19 @@ function buildCharts(){
     options:{responsive:true,maintainAspectRatio:true,cutout:'60%',
       plugins:{legend:{position:'bottom',labels:{color:'#5a6480',font:{family:"'DM Sans'",size:12},padding:16}},
                tooltip:{backgroundColor:'#fff',borderColor:'#dce2ed',borderWidth:1,bodyColor:'#1a1f2e',titleColor:'#0DD171',cornerRadius:8,padding:10}}}});
-  const rawDates=[...new Set(rows.map(r=>r.date))].sort();
   const fmtD=v=>{if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v).slice(0,10);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();};
-  const dates=rawDates.map(fmtD);
+  const rawDates=[...new Set(rows.map(r=>r.date))].sort();
+  const dates=rawDates.map(fmtD); // formatted labels for x-axis
   const gls=[...new Set(rows.map(r=>r.gl))].sort();
   const dgMap={};
+  // Key by rawDate so lookup stays consistent
   rows.forEach(r=>{const k=r.date+'|'+r.gl;if(!dgMap[k])dgMap[k]={sal:0,total:0};dgMap[k].sal+=r.sal;dgMap[k].total+=r.total;});
   const tCtx=document.getElementById('chart-trend');if(!tCtx)return;
   if(charts['chart-trend'])charts['chart-trend'].destroy();
   charts['chart-trend']=new Chart(tCtx,{type:'line',
     data:{labels:dates,datasets:gls.map((gl,i)=>({
       label:'GL '+gl,
-      data:dates.map(d=>{const k=d+'|'+gl;return dgMap[k]&&dgMap[k].total>0?+(dgMap[k].sal/dgMap[k].total*100).toFixed(2):null;}),
+      data:rawDates.map(d=>{const k=d+'|'+gl;return dgMap[k]&&dgMap[k].total>0?+(dgMap[k].sal/dgMap[k].total*100).toFixed(2):null;}),
       borderColor:COLORS[i%COLORS.length],backgroundColor:COLORS[i%COLORS.length]+'18',
       tension:0.35,pointRadius:5,pointHoverRadius:7,borderWidth:2.5,spanGaps:false}))},
     options:{...cCfg,scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
