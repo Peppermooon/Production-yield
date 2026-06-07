@@ -13,7 +13,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1054,7 +1053,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
     <input type="text" id="ty-search" placeholder="🔍  Filter by type…"
       oninput="filterTypeYield()"
       style="padding:9px 14px;border:1px solid var(--border);border-radius:10px;font-size:13px;width:280px;max-width:100%;background:var(--surface);color:var(--text)">
-    <button class="btn btn-outline btn-sm" onclick="exportTypeYieldExcel()">⬇ Download Excel</button>
+    <button class="btn btn-outline btn-sm" onclick="exportTypeYieldExcel()">⬇ Export CSV</button>
   </div>
 
   <div class="table-wrap">
@@ -1459,25 +1458,27 @@ window.onload=()=>{
 
 /* EXPORT TYPE YIELD TO EXCEL */
 function exportTypeYieldExcel(){
-  if(!tyData||!tyData.length){alert('No data to export.');return;}
-  const fmt=v=>v?parseFloat(v.toFixed(2)):0;
-  const fmtP=v=>v?parseFloat(v.toFixed(1)):0;
-  const wsData=[
+  if(!tyData||!tyData.length){alert('No data to export — refresh from sheet first.');return;}
+  const f=v=>(+v||0).toFixed(2);
+  const fp=v=>(+v||0).toFixed(1);
+  const csvRows=[
     ['Type','GL','Total (SQM)','Saleable (SQM)','C Grade (SQM)','Damage (SQM)','Yield %','C Grade %','Damage %','Entries'],
     ...tyData.map(d=>{
       const yld=d.total>0?d.sal/d.total*100:0;
       const cgp=d.total>0?d.cg/d.total*100:0;
       const dmp=d.total>0?d.dmg/d.total*100:0;
-      return [d.type,fmt(d.total),fmt(d.sal),fmt(d.cg),fmt(d.dmg),fmtP(yld),fmtP(cgp),fmtP(dmp),d.count];
+      const glStr=[...d.gl].sort().join('; ');
+      return['"'+d.type+'"','"'+glStr+'"',f(d.total),f(d.sal),f(d.cg),f(d.dmg),fp(yld),fp(cgp),fp(dmp),d.count];
     })
   ];
-  const ws=XLSX.utils.aoa_to_sheet(wsData);
-  // column widths
-  ws['!cols']=[{wch:22},{wch:14},{wch:16},{wch:14},{wch:14},{wch:10},{wch:12},{wch:12},{wch:10}];
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,'Cumulative Yield',ws);
+  const csv=csvRows.map(r=>r.join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
   const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
-  XLSX.writeFile(wb,'Cumulative_Yield_Types_'+today+'.xlsx');
+  const a=document.createElement('a');
+  a.href=url; a.download='Cumulative_Yield_'+today+'.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
 }
 
 /* CUMULATIVE YIELD OF TYPES */
