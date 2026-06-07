@@ -661,9 +661,10 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   tr.rpt-section-hdr td { font-size: 12px; letter-spacing: .06em; padding: 8px; }
 
   /* Charts */
-  .charts-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 14px; }
-  .chart-box { padding: 14px; border-radius: 10px; }
-  .chart-box canvas { max-height: 160px; }
+  .charts-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 14px; width: 100%; margin-left: 0; margin-right: 0; }
+  .chart-box { padding: 14px; border-radius: 10px; width: 100%; box-sizing: border-box; }
+  .chart-box canvas { max-height: 160px; width: 100% !important; }
+  .charts-grid .full { grid-column: 1; width: 100%; }
   .chart-title { font-size: 11px; margin-bottom: 10px; }
 
   /* Section label */
@@ -765,9 +766,122 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   .ac-drop { font-size: 15px; border-radius: 10px; }
   .ac-item { padding: 13px 14px; font-size: 15px; }
 }
+/* ═══ PIN LOCK MODAL ═══ */
+.pin-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 25, 40, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+}
+.pin-overlay.open { display: flex; }
+.pin-modal {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 32px 28px 28px;
+  width: 320px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  text-align: center;
+  animation: pinPop .2s ease;
+}
+@keyframes pinPop { from{transform:scale(.92);opacity:0} to{transform:scale(1);opacity:1} }
+.pin-icon { font-size: 36px; margin-bottom: 12px; }
+.pin-modal h2 { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.pin-modal p  { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+.pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.pin-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background .15s, transform .15s;
+}
+.pin-dot.filled { background: var(--accent); transform: scale(1.15); }
+.pin-dot.error  { background: var(--danger); }
+.pin-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.pin-key {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+  font-family: var(--font);
+}
+.pin-key:hover   { background: #eafff4; border-color: var(--accent); color: var(--accent-d); }
+.pin-key:active  { transform: scale(.93); }
+.pin-key.wide    { grid-column: span 2; font-size: 14px; color: var(--muted); }
+.pin-key.del     { font-size: 16px; }
+.pin-cancel {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px;
+  text-decoration: underline;
+}
+.pin-shake { animation: shake .4s ease; }
+@keyframes shake {
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-8px)}
+  40%{transform:translateX(8px)}
+  60%{transform:translateX(-6px)}
+  80%{transform:translateX(6px)}
+}
+#gl-confirm-banner { display: none; }
+#gl-confirm-banner.show { display: flex; }
 </style>
 </head>
 <body>
+
+<!-- ═══ PIN LOCK MODAL ═══ -->
+<div class="pin-overlay" id="pin-overlay">
+  <div class="pin-modal" id="pin-modal">
+    <div class="pin-icon">🔒</div>
+    <h2>Supervisor Access</h2>
+    <p>Enter your PIN to access Data Entry</p>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-keypad">
+      <button class="pin-key" onclick="pinPress('1')">1</button>
+      <button class="pin-key" onclick="pinPress('2')">2</button>
+      <button class="pin-key" onclick="pinPress('3')">3</button>
+      <button class="pin-key" onclick="pinPress('4')">4</button>
+      <button class="pin-key" onclick="pinPress('5')">5</button>
+      <button class="pin-key" onclick="pinPress('6')">6</button>
+      <button class="pin-key" onclick="pinPress('7')">7</button>
+      <button class="pin-key" onclick="pinPress('8')">8</button>
+      <button class="pin-key" onclick="pinPress('9')">9</button>
+      <button class="pin-key wide" onclick="pinPress('0')">0</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+    <button class="pin-cancel" onclick="pinCancel()">Cancel</button>
+  </div>
+</div>
 
 <!-- ═══ HEADER ═══ -->
 <header class="site-header">
@@ -781,7 +895,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 <!-- ═══ NAV ═══ -->
 <nav class="nav-bar">
   <button class="nav-btn active" id="nav-report" onclick="showPage('report',this)">Summary Report</button>
-  <button class="nav-btn"        id="nav-entry"  onclick="showPage('entry',this)">Data Entry</button>
+  <button class="nav-btn"        id="nav-entry"  onclick="pinGuard('entry',this)">Data Entry</button>
   <button class="nav-btn"        id="nav-charts" onclick="showPage('charts',this)">Charts</button>
   <button class="nav-btn"        id="nav-typeyield" onclick="showPage('typeyield',this)">Cumulative Yield of Types</button>
 </nav>
@@ -833,6 +947,11 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
       <div class="form-group" style="display:flex;align-items:flex-end;gap:10px">
         <button class="btn btn-primary" id="btn-add" onclick="addRow()">+ Add Entry</button>
         <button class="btn btn-outline btn-sm" onclick="clearForm()">Clear</button>
+      </div>
+      <div id="gl-confirm-banner" style="display:none;grid-column:1/-1;background:#fff8e1;border:1px solid #f59e0b;border-radius:10px;padding:14px 16px;display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px">
+        <span id="gl-confirm-msg" style="flex:1;font-size:13px;color:#92400e;font-weight:500"></span>
+        <button class="btn btn-primary btn-sm" onclick="confirmGLYes()">Yes, Save</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmGLNo()">No, Cancel</button>
       </div>
     </div>
   </div>
@@ -943,6 +1062,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
       <thead>
         <tr>
           <th>Type</th>
+          <th>GL</th>
           <th>Total (SQM)</th>
           <th>Saleable (SQM)</th>
           <th>C Grade (SQM)</th>
@@ -954,7 +1074,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
         </tr>
       </thead>
       <tbody id="ty-body">
-        <tr><td colspan="9" class="empty-state">No data yet — refresh from sheet</td></tr>
+        <tr><td colspan="10" class="empty-state">No data yet — refresh from sheet</td></tr>
       </tbody>
     </table>
   </div>
@@ -1038,6 +1158,8 @@ function updateAutoCalc(){
 }
 
 /* ADD ROW */
+let _pendingRow=null;
+
 async function addRow(){
   const date=document.getElementById('f-date').value,
         type=document.getElementById('f-type').value.toUpperCase().trim(),
@@ -1049,9 +1171,36 @@ async function addRow(){
   if(!date||!type||!gl){alert('Date, Type and GL are required.');return;}
   const total=sal+cg+saldmg+cutdmg;
   if(!total){alert('Enter at least one production quantity.');return;}
+  const row={id:Date.now(),date,type,gl,size:deriveSize(type),cat:deriveCat(type),tex:deriveTex(type),kiln:deriveKiln(gl),sal,cg,saldmg,cutdmg,total,yield:total>0?(sal/total)*100:0};
+  // Check if this type has previously been entered under a different GL
+  const prevGLs=[...new Set(rows.filter(r=>r.type===type&&r.gl!==gl).map(r=>r.gl))].sort();
+  if(prevGLs.length){
+    _pendingRow=row;
+    document.getElementById('gl-confirm-msg').textContent=
+      type+' has previously been produced in GL '+prevGLs.join(', ')+'. Is this entry correct?';
+    document.getElementById('gl-confirm-banner').classList.add('show');
+    document.getElementById('btn-add').disabled=true;
+    return;
+  }
+  await saveRow(row);
+}
+
+async function confirmGLYes(){
+  document.getElementById('gl-confirm-banner').classList.remove('show');
+  document.getElementById('btn-add').disabled=false;
+  if(_pendingRow){ await saveRow(_pendingRow); _pendingRow=null; }
+}
+
+function confirmGLNo(){
+  document.getElementById('gl-confirm-banner').classList.remove('show');
+  document.getElementById('btn-add').disabled=false;
+  _pendingRow=null;
+  setStatus('Entry cancelled','idle');
+}
+
+async function saveRow(row){
   const btn=document.getElementById('btn-add');
   btn.textContent='Saving…';btn.disabled=true;
-  const row={id:Date.now(),date,type,gl,size:deriveSize(type),cat:deriveCat(type),tex:deriveTex(type),kiln:deriveKiln(gl),sal,cg,saldmg,cutdmg,total,yield:total>0?(sal/total)*100:0};
   try{
     setStatus('Saving to Google Sheets…','spin');
     const res=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify({action:'add',...row})});
@@ -1263,7 +1412,9 @@ function buildCharts(){
     options:{responsive:true,maintainAspectRatio:true,cutout:'60%',
       plugins:{legend:{position:'bottom',labels:{color:'#5a6480',font:{family:"'DM Sans'",size:12},padding:16}},
                tooltip:{backgroundColor:'#fff',borderColor:'#dce2ed',borderWidth:1,bodyColor:'#1a1f2e',titleColor:'#0DD171',cornerRadius:8,padding:10}}}});
-  const dates=[...new Set(rows.map(r=>r.date))].sort();
+  const rawDates=[...new Set(rows.map(r=>r.date))].sort();
+  const fmtD=v=>{if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v).slice(0,10);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();};
+  const dates=rawDates.map(fmtD);
   const gls=[...new Set(rows.map(r=>r.gl))].sort();
   const dgMap={};
   rows.forEach(r=>{const k=r.date+'|'+r.gl;if(!dgMap[k])dgMap[k]={sal:0,total:0};dgMap[k].sal+=r.sal;dgMap[k].total+=r.total;});
@@ -1311,7 +1462,7 @@ function exportTypeYieldExcel(){
   const fmt=v=>v?parseFloat(v.toFixed(2)):0;
   const fmtP=v=>v?parseFloat(v.toFixed(1)):0;
   const wsData=[
-    ['Type','Total (SQM)','Saleable (SQM)','C Grade (SQM)','Damage (SQM)','Yield %','C Grade %','Damage %','Entries'],
+    ['Type','GL','Total (SQM)','Saleable (SQM)','C Grade (SQM)','Damage (SQM)','Yield %','C Grade %','Damage %','Entries'],
     ...tyData.map(d=>{
       const yld=d.total>0?d.sal/d.total*100:0;
       const cgp=d.total>0?d.cg/d.total*100:0;
@@ -1338,7 +1489,8 @@ function renderTypeYield(){
   const map={};
   rows.forEach(r=>{
     const t=r.type||'—';
-    if(!map[t])map[t]={type:t,total:0,sal:0,cg:0,dmg:0,count:0};
+    if(!map[t])map[t]={type:t,gl:new Set(),total:0,sal:0,cg:0,dmg:0,count:0};
+    if(r.gl)map[t].gl.add(String(r.gl));
     map[t].total+=+r.total||0;
     map[t].sal+=+r.sal||0;
     map[t].cg+=+r.cg||0;
@@ -1353,7 +1505,7 @@ function renderTypeYieldTable(data){
   const fmtP=v=>v?v.toFixed(1)+'%':'0.0%';
   const body=document.getElementById('ty-body');
   if(!data.length){
-    body.innerHTML='<tr><td colspan="9" class="empty-state">No data found</td></tr>';
+    body.innerHTML='<tr><td colspan="10" class="empty-state">No data found</td></tr>';
     return;
   }
   body.innerHTML=data.map(d=>{
@@ -1363,6 +1515,7 @@ function renderTypeYieldTable(data){
     const yc=yld>=90?'pos':yld>=75?'warn':'neg';
     return `<tr>
       <td style="font-family:monospace;font-size:12px">${d.type}</td>
+      <td>${[...d.gl].sort().join(', ')}</td>
       <td>${fmt(d.total)}</td>
       <td>${fmt(d.sal)}</td>
       <td>${fmt(d.cg)}</td>
@@ -1469,6 +1622,79 @@ async function downloadReportImage(){
   }catch(e){alert('Could not generate PDF: '+e.message);}
   btn.textContent='⬇ Download as PDF';btn.disabled=false;
 }
+
+/* ═══════════════════════════════════════════════
+   PIN LOCK  —  correct PIN is 0000
+═══════════════════════════════════════════════ */
+const PIN_CORRECT = '0000';
+let pinBuffer = '';
+let pinPendingPage = null;
+let pinPendingBtn  = null;
+let pinPendingMob  = null;
+let pinUnlocked    = false;  // stays unlocked for the session once correct
+
+function pinGuard(pageName, btn, mobId) {
+  // Already unlocked this session — go straight in
+  if (pinUnlocked) { showPage(pageName, btn, mobId); return; }
+  pinPendingPage = pageName;
+  pinPendingBtn  = btn;
+  pinPendingMob  = mobId;
+  pinBuffer = '';
+  pinRefreshDots();
+  document.getElementById('pin-overlay').classList.add('open');
+  // Allow physical keyboard too
+  document.addEventListener('keydown', pinKeyboard);
+}
+
+function pinPress(digit) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += digit;
+  pinRefreshDots();
+  if (pinBuffer.length === 4) pinCheck();
+}
+
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  pinRefreshDots();
+}
+
+function pinRefreshDots() {
+  for (let i = 0; i < 4; i++) {
+    const d = document.getElementById('pd' + i);
+    d.classList.toggle('filled', i < pinBuffer.length);
+    d.classList.remove('error');
+  }
+}
+
+function pinCheck() {
+  if (pinBuffer === PIN_CORRECT) {
+    pinUnlocked = true;
+    document.getElementById('pin-overlay').classList.remove('open');
+    document.removeEventListener('keydown', pinKeyboard);
+    showPage(pinPendingPage, pinPendingBtn, pinPendingMob);
+  } else {
+    // Wrong — shake and clear
+    for (let i = 0; i < 4; i++) document.getElementById('pd' + i).classList.add('error');
+    document.getElementById('pin-modal').classList.add('pin-shake');
+    setTimeout(() => {
+      document.getElementById('pin-modal').classList.remove('pin-shake');
+      pinBuffer = '';
+      pinRefreshDots();
+    }, 450);
+  }
+}
+
+function pinCancel() {
+  pinBuffer = '';
+  document.getElementById('pin-overlay').classList.remove('open');
+  document.removeEventListener('keydown', pinKeyboard);
+}
+
+function pinKeyboard(e) {
+  if (e.key >= '0' && e.key <= '9') pinPress(e.key);
+  else if (e.key === 'Backspace') pinDel();
+  else if (e.key === 'Escape') pinCancel();
+}
 </script>
 
 </div><!-- /.page-shell -->
@@ -1479,7 +1705,7 @@ async function downloadReportImage(){
     <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
     <span class="mob-tab-label">Report</span>
   </button>
-  <button class="mob-tab" id="mobt-entry" onclick="showPage('entry',this,'mobt-entry')">
+  <button class="mob-tab" id="mobt-entry" onclick="pinGuard('entry',this,'mobt-entry')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
     <span class="mob-tab-label">Entry</span>
   </button>
