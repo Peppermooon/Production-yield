@@ -848,8 +848,8 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   60%{transform:translateX(-6px)}
   80%{transform:translateX(6px)}
 }
-#gl-confirm-banner { display: none; }
-#gl-confirm-banner.show { display: flex; }
+#gl-confirm-banner { display: none !important; }
+#gl-confirm-banner.show { display: flex !important; }
 </style>
 </head>
 <body>
@@ -948,7 +948,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
         <button class="btn btn-primary" id="btn-add" onclick="addRow()">+ Add Entry</button>
         <button class="btn btn-outline btn-sm" onclick="clearForm()">Clear</button>
       </div>
-      <div id="gl-confirm-banner" style="display:none;grid-column:1/-1;background:#fff8e1;border:1px solid #f59e0b;border-radius:10px;padding:14px 16px;display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px">
+      <div id="gl-confirm-banner" style="grid-column:1/-1;background:#fff8e1;border:1px solid #f59e0b;border-radius:10px;padding:14px 16px;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px">
         <span id="gl-confirm-msg" style="flex:1;font-size:13px;color:#92400e;font-weight:500"></span>
         <button class="btn btn-primary btn-sm" onclick="confirmGLYes()">Yes, Save</button>
         <button class="btn btn-danger btn-sm" onclick="confirmGLNo()">No, Cancel</button>
@@ -1026,7 +1026,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   <div class="charts-grid">
     <div class="chart-box full">
       <div class="chart-title">Daily GL Yield Trend</div>
-      <canvas id="chart-trend" style="max-height:220px"></canvas>
+      <canvas id="chart-trend" style="max-height:220px;width:100%!important"></canvas>
     </div>
   </div>
   <div class="charts-grid">
@@ -1112,7 +1112,7 @@ function showPage(name,btn,mobId){
   // scroll page shell to top on tab switch
   const shell=document.querySelector('.page-shell');
   if(shell)shell.scrollTop=0;
-  if(name==='charts') buildCharts();
+  if(name==='charts'){ setTimeout(()=>{ buildCharts(); window.dispatchEvent(new Event('resize')); },50); }
   if(name==='report') renderReport();
   if(name==='typeyield') renderTypeYield();
 }
