@@ -886,7 +886,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 <header class="site-header">
   <div>
     <h1 id="site-title">Production Yield Summary Analysis</h1>
-    <div class="subtitle">Manufacturing Quality &amp; Production Intelligence</div>
+    <div class="subtitle">Manufacturing Quality &amp; Production Intelligence &nbsp;·&nbsp; Today: <span id="today-date"></span></div>
   </div>
   <div class="live-badge"><div class="live-dot"></div>Live · Google Sheets</div>
 </header>
@@ -1244,6 +1244,7 @@ async function loadFromSheet(){
     if(json.status==='ok'){
       rows=json.data.map(r=>({...r,gl:String(r.gl),sal:+r.sal,cg:+r.cg,saldmg:+r.saldmg,cutdmg:+r.cutdmg,total:+r.total,yield:+r.total>0?(+r.sal/+r.total)*100:0}));
       rebuildEntry();
+      updateAsAt();
       // Re-render report and charts if their pages are active, or always keep data fresh
       const reportPage=document.getElementById('page-report');
       if(reportPage&&reportPage.classList.contains('active')) renderReport();
@@ -1313,8 +1314,7 @@ function resetEntry(){
 /* CUMULATIVE REPORT */
 function renderReport(){
   const filtered=[...rows];
-  const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
-  document.getElementById('rpt-title').textContent='Monthly Production Yield Summary Analysis (As at '+today+')';
+  updateAsAt();
   const rt=filtered.reduce((s,r)=>s+r.total,0),rs=filtered.reduce((s,r)=>s+r.sal,0),
         rc=filtered.reduce((s,r)=>s+r.cg,0),rd=filtered.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),ry=rt>0?rs/rt*100:0;
   document.getElementById('rk-total').textContent=fmt(rt);
@@ -1457,24 +1457,49 @@ function buildCharts(){
     options:{...cCfg,scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
 }
 
-/* HEADER TITLE */
-function updateHeaderTitle(){
-  const val = document.getElementById('f-date').value;
-  const el  = document.getElementById('site-title');
-  if(val){
-    const d = new Date(val);
-    const formatted = String(d.getDate()).padStart(2,'0') + '-' +
-                      String(d.getMonth()+1).padStart(2,'0') + '-' +
-                      d.getFullYear();
-    el.textContent = 'Production Yield Summary Analysis (As at ' + formatted + ')';
-  } else {
-    el.textContent = 'Production Yield Summary Analysis';
-  }
+
+/* ── DATE HELPERS ─────────────────────────────────── */
+function fmtDateLocal(v){
+  // Converts any date value to DD/MM/YYYY without timezone shift
+  if(!v) return '—';
+  const d=new Date(v);
+  if(isNaN(d)) return String(v).slice(0,10);
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
 }
+function normDateStr(v){
+  // Extracts correct local date from any format without UTC shift
+  if(!v) return '';
+  const d=new Date(v);
+  if(isNaN(d)) return String(v).slice(0,10);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function getLastEntryDate(){
+  const dates=rows.map(r=>normDateStr(r.date)).filter(Boolean).sort();
+  return dates.length ? dates[dates.length-1] : null;
+}
+function updateAsAt(){
+  const last=getLastEntryDate();
+  const asAtLabel=last ? 'As at '+fmtDateLocal(last) : '';
+  // Header title
+  const el=document.getElementById('site-title');
+  if(el) el.textContent='Production Yield Summary Analysis'+(asAtLabel?' ('+asAtLabel+')':'');
+  // Summary report title
+  const rt=document.getElementById('rpt-title');
+  if(rt) rt.textContent='Monthly Production Yield Summary Analysis'+(asAtLabel?' ('+asAtLabel+')':'');
+  // Type yield asof
+  const ta=document.getElementById('ty-asof');
+  if(ta) ta.textContent=asAtLabel;
+}
+
+/* HEADER TITLE */
+function updateHeaderTitle(){ updateAsAt(); }
 
 /* INIT */
 window.onload=()=>{
   document.getElementById('f-date').value=new Date().toISOString().slice(0,10);
+  // Show today's actual date in subtitle
+  const todayEl=document.getElementById('today-date');
+  if(todayEl) todayEl.textContent=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
   updateHeaderTitle();
   renderReport();
   loadFromSheet();
@@ -1512,9 +1537,8 @@ function exportTypeYieldExcel(){
 /* CUMULATIVE YIELD OF TYPES */
 let tyData=[];
 function renderTypeYield(){
-  const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
   document.getElementById('ty-title').textContent='Cumulative Yield of Types';
-  document.getElementById('ty-asof').textContent='As at '+today;
+  updateAsAt();
   // aggregate by type
   const map={};
   rows.forEach(r=>{
