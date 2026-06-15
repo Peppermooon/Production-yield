@@ -849,6 +849,53 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 }
 #gl-confirm-banner { display: none !important; }
 #gl-confirm-banner.show { display: flex !important; }
+
+/* ═══ DATE RANGE FILTER ═══ */
+.date-range-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.date-range-bar .form-group {
+  margin-bottom: 0;
+  width: 140px;
+  flex: 0 0 auto;
+}
+.date-range-bar .form-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 6px;
+}
+.date-range-bar input[type=date] {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 10px;
+  font-family: var(--body);
+  font-size: 13px;
+  font-weight: 400;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+  -webkit-appearance: none;
+}
+.date-range-bar input[type=date]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(13,209,113,.12);
+  background: #fff;
+}
+@media (max-width: 768px) {
+  .date-range-bar { gap: 8px; }
+  .date-range-bar .form-group { width: calc(50% - 4px); }
+  .date-range-bar input[type=date] { padding: 10px 8px; font-size: 14px; border-radius: 10px; }
+}
 </style>
 </head>
 <body>
@@ -955,6 +1002,12 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
     </div>
   </div>
 
+  <div class="date-range-bar">
+    <div class="form-group"><label>From</label><input type="date" id="rng-from-1" class="rng-from" onchange="onRangeChange(this)"></div>
+    <div class="form-group"><label>To</label><input type="date" id="rng-to-1" class="rng-to" onchange="onRangeChange(this)"></div>
+    <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-outline btn-sm" onclick="clearRange()">✕ Clear</button></div>
+  </div>
+
   <!-- KPIs -->
   <div class="kpi-row">
     <div class="kpi"><div class="kpi-label">Total Production</div><div class="kpi-value" id="kpi-total">—</div></div>
@@ -994,6 +1047,12 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 
   <div class="report-title" id="rpt-title">Monthly Production Yield Summary Analysis</div>
 
+  <div class="date-range-bar">
+    <div class="form-group"><label>From</label><input type="date" id="rng-from-2" class="rng-from" onchange="onRangeChange(this)"></div>
+    <div class="form-group"><label>To</label><input type="date" id="rng-to-2" class="rng-to" onchange="onRangeChange(this)"></div>
+    <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-outline btn-sm" onclick="clearRange()">✕ Clear</button></div>
+  </div>
+
   <div class="month-bar">
     <button class="btn btn-primary btn-sm" onclick="loadFromSheet()">⟳ Refresh from Sheet</button>
     <button class="btn btn-outline btn-sm" onclick="downloadReportImage()">⬇ Download as PDF</button>
@@ -1019,6 +1078,12 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 <!-- ══════════════════════════════════════════════════════ -->
 <div class="page" id="page-charts">
 <div class="container">
+
+  <div class="date-range-bar">
+    <div class="form-group"><label>From</label><input type="date" id="rng-from-3" class="rng-from" onchange="onRangeChange(this)"></div>
+    <div class="form-group"><label>To</label><input type="date" id="rng-to-3" class="rng-to" onchange="onRangeChange(this)"></div>
+    <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-outline btn-sm" onclick="clearRange()">✕ Clear</button></div>
+  </div>
 
   <div class="section-label">Yield Charts</div>
 
@@ -1054,6 +1119,12 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 
   <div class="report-title" id="ty-title">Cumulative Yield of Types</div>
   <div class="report-asof" id="ty-asof"></div>
+
+  <div class="date-range-bar">
+    <div class="form-group"><label>From</label><input type="date" id="rng-from-4" class="rng-from" onchange="onRangeChange(this)"></div>
+    <div class="form-group"><label>To</label><input type="date" id="rng-to-4" class="rng-to" onchange="onRangeChange(this)"></div>
+    <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-outline btn-sm" onclick="clearRange()">✕ Clear</button></div>
+  </div>
 
   <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <input type="text" id="ty-search" placeholder="🔍  Filter by type…"
@@ -1278,17 +1349,18 @@ function aggRows(arr,keyFn){
 
 /* REBUILD ENTRY PAGE */
 function rebuildEntry(){
-  if(!rows.length){resetEntry();return;}
-  const tot=rows.reduce((s,r)=>s+r.total,0),sal=rows.reduce((s,r)=>s+r.sal,0),
-        cg=rows.reduce((s,r)=>s+r.cg,0),dmg=rows.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),
-        yld=tot>0?(sal/tot)*100:0,gls=new Set(rows.map(r=>r.gl)).size;
+  const fr=getFilteredRows();
+  if(!fr.length){resetEntry();return;}
+  const tot=fr.reduce((s,r)=>s+r.total,0),sal=fr.reduce((s,r)=>s+r.sal,0),
+        cg=fr.reduce((s,r)=>s+r.cg,0),dmg=fr.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),
+        yld=tot>0?(sal/tot)*100:0,gls=new Set(fr.map(r=>r.gl)).size;
   document.getElementById('kpi-total').textContent=fmt(tot);
   document.getElementById('kpi-sal').textContent=fmt(sal);
   document.getElementById('kpi-cg').textContent=fmt(cg);
   document.getElementById('kpi-dmg').textContent=fmt(dmg);
   document.getElementById('kpi-gls').textContent=gls;
   const ye=document.getElementById('kpi-yield');ye.textContent=fmtP(yld);ye.className='kpi-value '+yc(yld);
-  const sorted=[...rows].sort((a,b)=>b.id-a.id);
+  const sorted=[...fr].sort((a,b)=>b.id-a.id);
   const now=Date.now();
   document.getElementById('entries-body').innerHTML=sorted.map(r=>{
     const canDel=(now-r.id)<86400000;
@@ -1313,7 +1385,7 @@ function resetEntry(){
 
 /* CUMULATIVE REPORT */
 function renderReport(){
-  const filtered=[...rows];
+  const filtered=getFilteredRows();
   updateAsAt();
   const rt=filtered.reduce((s,r)=>s+r.total,0),rs=filtered.reduce((s,r)=>s+r.sal,0),
         rc=filtered.reduce((s,r)=>s+r.cg,0),rd=filtered.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),ry=rt>0?rs/rt*100:0;
@@ -1400,15 +1472,16 @@ function makeBar(id,labels,data){
     options:{...cCfg,plugins:{...cCfg.plugins,legend:{display:false}},scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
 }
 function buildCharts(){
-  if(!rows.length)return;
-  const glG=aggRows(rows,r=>'GL '+r.gl).sort((a,b)=>a.key<b.key?-1:1);
+  const cr=getFilteredRows();
+  if(!cr.length)return;
+  const glG=aggRows(cr,r=>'GL '+r.gl).sort((a,b)=>a.key<b.key?-1:1);
   makeBar('chart-gl',glG.map(g=>g.key),glG.map(g=>+g.yield.toFixed(2)));
-  const knG=aggRows(rows,r=>r.kiln).sort((a,b)=>a.key<b.key?-1:1);
+  const knG=aggRows(cr,r=>r.kiln).sort((a,b)=>a.key<b.key?-1:1);
   makeBar('chart-kiln',knG.map(g=>g.key),knG.map(g=>+g.yield.toFixed(2)));
-  const txG=aggRows(rows,r=>r.tex).sort((a,b)=>a.key<b.key?-1:1);
+  const txG=aggRows(cr,r=>r.tex).sort((a,b)=>a.key<b.key?-1:1);
   makeBar('chart-tex',txG.map(g=>'Tex '+g.key),txG.map(g=>+g.yield.toFixed(2)));
-  const totSal=rows.reduce((s,r)=>s+r.sal,0),totCg=rows.reduce((s,r)=>s+r.cg,0),
-        totSalD=rows.reduce((s,r)=>s+r.saldmg,0),totCutD=rows.reduce((s,r)=>s+r.cutdmg,0);
+  const totSal=cr.reduce((s,r)=>s+r.sal,0),totCg=cr.reduce((s,r)=>s+r.cg,0),
+        totSalD=cr.reduce((s,r)=>s+r.saldmg,0),totCutD=cr.reduce((s,r)=>s+r.cutdmg,0);
   const bCtx=document.getElementById('chart-breakdown');if(!bCtx)return;
   if(charts['chart-breakdown'])charts['chart-breakdown'].destroy();
   charts['chart-breakdown']=new Chart(bCtx,{type:'doughnut',
@@ -1418,12 +1491,12 @@ function buildCharts(){
       plugins:{legend:{position:'bottom',labels:{color:'#5a6480',font:{family:"'DM Sans'",size:12},padding:16}},
                tooltip:{backgroundColor:'#fff',borderColor:'#dce2ed',borderWidth:1,bodyColor:'#1a1f2e',titleColor:'#0DD171',cornerRadius:8,padding:10}}}});
   const fmtD=v=>{if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v).slice(0,10);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();};
-  const rawDates=[...new Set(rows.map(r=>r.date))].sort();
+  const rawDates=[...new Set(cr.map(r=>r.date))].sort();
   const dates=rawDates.map(fmtD); // formatted labels for x-axis
-  const gls=[...new Set(rows.map(r=>r.gl))].sort();
+  const gls=[...new Set(cr.map(r=>r.gl))].sort();
   const dgMap={};
   // Key by rawDate so lookup stays consistent
-  rows.forEach(r=>{const k=r.date+'|'+r.gl;if(!dgMap[k])dgMap[k]={sal:0,total:0};dgMap[k].sal+=r.sal;dgMap[k].total+=r.total;});
+  cr.forEach(r=>{const k=r.date+'|'+r.gl;if(!dgMap[k])dgMap[k]={sal:0,total:0};dgMap[k].sal+=r.sal;dgMap[k].total+=r.total;});
   const tCtx=document.getElementById('chart-trend');if(!tCtx)return;
   if(charts['chart-trend'])charts['chart-trend'].destroy();
   charts['chart-trend']=new Chart(tCtx,{type:'line',
@@ -1458,6 +1531,47 @@ function buildCharts(){
 }
 
 
+
+/* ═══ DATE RANGE FILTER ═══ */
+let _rngFrom='', _rngTo='';
+function isRangeActive(){
+  return !!_rngFrom || !!_rngTo;
+}
+function getFilteredRows(){
+  if(!_rngFrom && !_rngTo) return [...rows];
+  return rows.filter(r=>{
+    const d=normDateStr(r.date);
+    if(!d) return false;
+    if(_rngFrom && d<_rngFrom) return false;
+    if(_rngTo && d>_rngTo) return false;
+    return true;
+  });
+}
+function syncRangeInputs(){
+  document.querySelectorAll('.rng-from').forEach(el=>{ el.value=_rngFrom; });
+  document.querySelectorAll('.rng-to').forEach(el=>{ el.value=_rngTo; });
+}
+function onRangeChange(el){
+  if(el.classList.contains('rng-from')) _rngFrom=el.value;
+  if(el.classList.contains('rng-to')) _rngTo=el.value;
+  syncRangeInputs();
+  refreshAllPages();
+}
+function clearRange(){
+  _rngFrom=''; _rngTo='';
+  syncRangeInputs();
+  refreshAllPages();
+}
+function refreshAllPages(){
+  rebuildEntry();
+  renderReport();
+  renderTypeYield();
+  const chartsPage=document.getElementById('page-charts');
+  if(chartsPage&&chartsPage.classList.contains('active')){
+    setTimeout(()=>{ buildCharts(); window.dispatchEvent(new Event('resize')); },50);
+  }
+}
+
 /* ── DATE HELPERS ─────────────────────────────────── */
 function fmtDateLocal(v){
   // Converts any date value to DD/MM/YYYY without timezone shift
@@ -1474,11 +1588,19 @@ function normDateStr(v){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function getLastEntryDate(){
-  const dates=rows.map(r=>normDateStr(r.date)).filter(Boolean).sort();
-  return dates.length ? dates[dates.length-1] : null;
+  // Latest date among rows belonging to the CURRENT month (YYYY-MM = today's month)
+  const nowMonth=new Date();
+  const curMonthKey=nowMonth.getFullYear()+'-'+String(nowMonth.getMonth()+1).padStart(2,'0');
+  const monthDates=rows.map(r=>normDateStr(r.date)).filter(d=>d&&d.slice(0,7)===curMonthKey).sort();
+  if(monthDates.length) return monthDates[monthDates.length-1];
+  // Fallback: if no entries this month yet, use the latest entry overall
+  const allDates=rows.map(r=>normDateStr(r.date)).filter(Boolean).sort();
+  return allDates.length ? allDates[allDates.length-1] : null;
 }
 function updateAsAt(){
-  const last=getLastEntryDate();
+  // When a date range filter is active, hide the "As at" label entirely
+  const rangeActive=isRangeActive();
+  const last=rangeActive?null:getLastEntryDate();
   const asAtLabel=last ? 'As at '+fmtDateLocal(last) : '';
   // Header title
   const el=document.getElementById('site-title');
@@ -1541,7 +1663,7 @@ function renderTypeYield(){
   updateAsAt();
   // aggregate by type
   const map={};
-  rows.forEach(r=>{
+  getFilteredRows().forEach(r=>{
     const t=r.type||'—';
     if(!map[t])map[t]={type:t,gl:new Set(),total:0,sal:0,cg:0,dmg:0,count:0};
     if(r.gl)map[t].gl.add(String(r.gl));
