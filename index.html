@@ -13,8 +13,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tile Production Yield Analysis System</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -937,7 +935,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
     <h1 id="site-title">Production Yield Summary Analysis</h1>
     <div class="subtitle">Manufacturing Quality &amp; Production Intelligence &nbsp;·&nbsp; Today: <span id="today-date"></span></div>
   </div>
-  <div class="live-badge"><div class="live-dot"></div>Live · Google Sheets</div>
+  <div class="live-badge"><div class="live-dot"></div>LANKATILES · Ranala Sorting - QA</div>
 </header>
 
 <!-- ═══ NAV ═══ -->
@@ -1057,7 +1055,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 
   <div class="month-bar">
     <button class="btn btn-primary btn-sm" onclick="loadFromSheet()">⟳ Refresh from Sheet</button>
-    <button class="btn btn-outline btn-sm" onclick="downloadReportImage()">⬇ Download as PDF</button>
+    <button class="btn btn-outline btn-sm" onclick="exportReportCSV()">⬇ Export CSV</button>
   </div>
 
   <div class="kpi-row" id="rpt-kpi-row">
@@ -1751,54 +1749,36 @@ function acHighlight(items){
 }
 
 /* DOWNLOAD REPORT AS PDF */
-async function downloadReportImage(){
-  const btn=event.target;
-  btn.textContent='Generating PDF…';btn.disabled=true;
-  const el=document.getElementById('page-report');
-  try{
-    const canvas=await html2canvas(el,{
-      scale:2,
-      useCORS:true,
-      backgroundColor:'#f0f4f9',
-      scrollY:-window.scrollY,
-      windowWidth:el.scrollWidth,
-      width:el.scrollWidth,
-      height:el.scrollHeight
+function exportReportCSV(){
+  const filtered=getFilteredRows();
+  if(!filtered.length){alert('No data to export.');return;}
+  const f=v=>(+v||0).toFixed(2);
+  const fp=v=>(+v||0).toFixed(1)+'%';
+  const rows=[];
+  rows.push(['Category','Group','Yield %','C Grade %','Damage %','Saleable (SQM)','C Grade (SQM)','Damage (SQM)','Total (SQM)']);
+  const sections=[
+    {label:'GL Wise',groups:aggRows(filtered,r=>'GL '+r.gl)},
+    {label:'Size Wise',groups:aggRows(filtered,r=>r.size)},
+    {label:'GL + Size + Category',groups:aggRows(filtered,r=>`GL ${r.gl} ${r.size} ${r.cat}`)},
+    {label:'Texture Wise',groups:aggRows(filtered,r=>r.tex)},
+    {label:'Kiln Wise',groups:aggRows(filtered,r=>r.kiln)},
+  ];
+  sections.forEach(s=>{
+    rows.push([s.label,'','','','','','','','']);
+    s.groups.forEach(g=>{
+      const dmg=g.total>0?((g.total-g.sal-g.cg)/g.total*100):0;
+      const cgp=g.total>0?(g.cg/g.total*100):0;
+      rows.push(['','"'+g.key+'"',fp(g.yield),fp(cgp),fp(dmg),f(g.sal),f(g.cg),f(g.total-g.sal-g.cg),f(g.total)]);
     });
-    const imgData=canvas.toDataURL('image/png');
-    const {jsPDF}=window.jspdf;
-    // A4 landscape: 297 x 210 mm
-    const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-    const pageW=pdf.internal.pageSize.getWidth();
-    const pageH=pdf.internal.pageSize.getHeight();
-    const imgW=canvas.width;
-    const imgH=canvas.height;
-    const ratio=imgW/imgH;
-    // fit image width to page, then paginate if taller
-    const pdfW=pageW;
-    const pdfH=pdfW/ratio;
-    if(pdfH<=pageH){
-      pdf.addImage(imgData,'PNG',0,0,pdfW,pdfH);
-    } else {
-      // multi-page: slice canvas into page-height chunks
-      const sliceH=Math.floor(imgH*(pageH/pdfH));
-      let y=0;
-      while(y<imgH){
-        const sliceCanvas=document.createElement('canvas');
-        sliceCanvas.width=imgW;
-        sliceCanvas.height=Math.min(sliceH,imgH-y);
-        const ctx=sliceCanvas.getContext('2d');
-        ctx.drawImage(canvas,0,-y);
-        const sliceData=sliceCanvas.toDataURL('image/png');
-        if(y>0)pdf.addPage();
-        pdf.addImage(sliceData,'PNG',0,0,pdfW,pageH*(sliceCanvas.height/sliceH));
-        y+=sliceH;
-      }
-    }
-    const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
-    pdf.save('Cumulative_Report_'+today+'.pdf');
-  }catch(e){alert('Could not generate PDF: '+e.message);}
-  btn.textContent='⬇ Download as PDF';btn.disabled=false;
+  });
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
+  const a=document.createElement('a');
+  a.href=url; a.download='Summary_Report_'+today+'.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
 }
 
 /* ═══════════════════════════════════════════════
