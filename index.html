@@ -987,7 +987,8 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
       <div class="form-group"><label>Saleable Prod.</label><input type="number" id="f-sal" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
       <div class="form-group"><label>C Grade Prod.</label><input type="number" id="f-cgrade" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
       <div class="form-group"><label>Saleable Damage</label><input type="number" id="f-saldmg" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
-      <div class="form-group"><label>Cut &amp; Damage</label><input type="number" id="f-cutdmg" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
+      <div class="form-group"><label>Cut Damage</label><input type="number" id="f-cutdmg" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
+      <div class="form-group"><label>Crush Damage</label><input type="number" id="f-crushdmg" min="0" placeholder="0" oninput="updateAutoCalc()"></div>
       <div class="form-group"><label>Total Prod. (auto)</label><input type="text" id="f-total" class="auto-field" readonly></div>
       <div class="form-group"><label>Yield % (auto)</label><input type="text" id="f-yield" class="auto-field" readonly></div>
       <div class="form-group" style="display:flex;align-items:flex-end;gap:10px">
@@ -1031,11 +1032,11 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
         <thead><tr>
           <th>Type</th><th>GL</th><th>Size</th><th>Cat.</th><th>Tex.</th><th>Kiln</th>
           <th class="num">Saleable</th><th class="num">C Grade</th>
-          <th class="num">Sal.Dmg</th><th class="num">Cut&amp;Dmg</th>
+          <th class="num">Sal.Dmg</th><th class="num">Cut Dmg</th><th class="num">Crush Dmg</th>
           <th class="num">Total</th><th class="num">Yield %</th><th>Entered on</th><th>Del</th>
         </tr></thead>
         <tbody id="entries-body">
-          <tr><td colspan="14" class="empty-state">No data yet — add entries above</td></tr>
+          <tr><td colspan="15" class="empty-state">No data yet — add entries above</td></tr>
         </tbody>
       </table>
     </div>
@@ -1111,6 +1112,10 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   <div class="charts-grid">
     <div class="chart-box"><div class="chart-title">Texture-Wise Yield %</div><canvas id="chart-tex"></canvas></div>
     <div class="chart-box"><div class="chart-title">Production Breakdown</div><canvas id="chart-breakdown"></canvas></div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-box"><div class="chart-title">GL-Wise Total Damage %</div><canvas id="chart-gl-dmg"></canvas></div>
+    <div class="chart-box"><div class="chart-title">GL-Wise Crush Damage %</div><canvas id="chart-gl-crush"></canvas></div>
   </div>
 
 </div>
@@ -1233,7 +1238,8 @@ function updateAuto(){
 }
 function updateAutoCalc(){
   const s=+document.getElementById('f-sal').value||0,c=+document.getElementById('f-cgrade').value||0,
-        sd=+document.getElementById('f-saldmg').value||0,cd=+document.getElementById('f-cutdmg').value||0,tot=s+c+sd+cd;
+        sd=+document.getElementById('f-saldmg').value||0,cd=+document.getElementById('f-cutdmg').value||0,
+        crd=+document.getElementById('f-crushdmg').value||0,tot=s+c+sd+cd+crd;
   document.getElementById('f-total').value=tot;
   document.getElementById('f-yield').value=tot>0?((s/tot)*100).toFixed(2)+'%':'0.00%';
 }
@@ -1248,11 +1254,12 @@ async function addRow(){
         sal=+document.getElementById('f-sal').value||0,
         cg=+document.getElementById('f-cgrade').value||0,
         saldmg=+document.getElementById('f-saldmg').value||0,
-        cutdmg=+document.getElementById('f-cutdmg').value||0;
+        cutdmg=+document.getElementById('f-cutdmg').value||0,
+        crushdmg=+document.getElementById('f-crushdmg').value||0;
   if(!date||!type||!gl){alert('Date, Type and GL are required.');return;}
-  const total=sal+cg+saldmg+cutdmg;
+  const total=sal+cg+saldmg+cutdmg+crushdmg;
   if(!total){alert('Enter at least one production quantity.');return;}
-  const row={id:Date.now(),date,type,gl,size:deriveSize(type),cat:deriveCat(type),tex:deriveTex(type),kiln:deriveKiln(gl),sal,cg,saldmg,cutdmg,total,yield:total>0?(sal/total)*100:0};
+  const row={id:Date.now(),date,type,gl,size:deriveSize(type),cat:deriveCat(type),tex:deriveTex(type),kiln:deriveKiln(gl),sal,cg,saldmg,cutdmg,crushdmg,total,yield:total>0?(sal/total)*100:0};
   // Check if this type has previously been entered under a different GL
   const prevGLs=[...new Set(rows.filter(r=>r.type===type&&r.gl!==gl).map(r=>r.gl))].sort();
   if(prevGLs.length){
@@ -1322,7 +1329,7 @@ async function deleteRow(id){
 
 /* CLEAR FORM */
 function clearForm(){
-  ['f-type','f-sal','f-cgrade','f-saldmg','f-cutdmg'].forEach(id=>document.getElementById(id).value='');
+  ['f-type','f-sal','f-cgrade','f-saldmg','f-cutdmg','f-crushdmg'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-gl').value='';
   ['f-size','f-cat','f-tex','f-kiln','f-total','f-yield'].forEach(id=>document.getElementById(id).value='');
 }
@@ -1334,7 +1341,7 @@ async function loadFromSheet(){
     const res=await fetch(SHEET_URL);
     const json=await res.json();
     if(json.status==='ok'){
-      rows=json.data.map(r=>({...r,gl:String(r.gl),sal:+r.sal,cg:+r.cg,saldmg:+r.saldmg,cutdmg:+r.cutdmg,total:+r.total,yield:+r.total>0?(+r.sal/+r.total)*100:0}));
+      rows=json.data.map(r=>({...r,gl:String(r.gl),sal:+r.sal,cg:+r.cg,saldmg:+r.saldmg,cutdmg:+r.cutdmg,crushdmg:+r.crushdmg||0,total:+r.total,yield:+r.total>0?(+r.sal/+r.total)*100:0}));
       // Merge extra types from TypeList sheet into autocomplete
       if(json.extraTypes&&json.extraTypes.length){
         json.extraTypes.forEach(t=>{
@@ -1366,13 +1373,14 @@ function aggRows(arr,keyFn){
   const map={};
   arr.forEach(r=>{
     const k=keyFn(r);if(k===null||k===undefined||k==='')return;
-    if(!map[k])map[k]={key:k,sal:0,cg:0,saldmg:0,cutdmg:0,total:0};
-    map[k].sal+=r.sal;map[k].cg+=r.cg;map[k].saldmg+=r.saldmg;map[k].cutdmg+=r.cutdmg;map[k].total+=r.total;
+    if(!map[k])map[k]={key:k,sal:0,cg:0,saldmg:0,cutdmg:0,crushdmg:0,total:0};
+    map[k].sal+=r.sal;map[k].cg+=r.cg;map[k].saldmg+=r.saldmg;map[k].cutdmg+=r.cutdmg;map[k].crushdmg+=(r.crushdmg||0);map[k].total+=r.total;
   });
-  return Object.values(map).map(g=>({...g,damage:g.saldmg+g.cutdmg,
+  return Object.values(map).map(g=>({...g,damage:g.saldmg+g.cutdmg+g.crushdmg,
     yield:g.total>0?g.sal/g.total*100:0,
     cgPct:g.total>0?g.cg/g.total*100:0,
-    dmgPct:g.total>0?(g.saldmg+g.cutdmg)/g.total*100:0}));
+    dmgPct:g.total>0?(g.saldmg+g.cutdmg+g.crushdmg)/g.total*100:0,
+    crushPct:g.total>0?g.crushdmg/g.total*100:0}));
 }
 
 /* REBUILD ENTRY PAGE */
@@ -1380,7 +1388,7 @@ function rebuildEntry(){
   const fr=getFilteredRows();
   if(!fr.length){resetEntry();return;}
   const tot=fr.reduce((s,r)=>s+r.total,0),sal=fr.reduce((s,r)=>s+r.sal,0),
-        cg=fr.reduce((s,r)=>s+r.cg,0),dmg=fr.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),
+        cg=fr.reduce((s,r)=>s+r.cg,0),dmg=fr.reduce((s,r)=>s+r.saldmg+r.cutdmg+(r.crushdmg||0),0),
         yld=tot>0?(sal/tot)*100:0,gls=new Set(fr.map(r=>r.gl)).size;
   document.getElementById('kpi-total').textContent=fmt(tot);
   document.getElementById('kpi-sal').textContent=fmt(sal);
@@ -1398,7 +1406,7 @@ function rebuildEntry(){
     return `<tr class="${r.yield<90?'row-bad':''}">
       <td>${r.type}</td><td>${r.gl}</td><td>${r.size}</td><td>${r.cat}</td><td>${r.tex}</td><td>${r.kiln}</td>
       <td class="num">${fmt(r.sal)}</td><td class="num">${fmt(r.cg)}</td>
-      <td class="num">${fmt(r.saldmg)}</td><td class="num">${fmt(r.cutdmg)}</td>
+      <td class="num">${fmt(r.saldmg)}</td><td class="num">${fmt(r.cutdmg)}</td><td class="num">${fmt(r.crushdmg||0)}</td>
       <td class="num">${fmt(r.total)}</td>
       <td class="num ${ycls(r.yield)}">${fmtP(r.yield)}</td>
       <td>${(()=>{if(!r.date)return'—';const d=new Date(r.date);if(isNaN(d))return String(r.date).slice(0,10);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();})()}</td>
@@ -1408,7 +1416,7 @@ function rebuildEntry(){
 }
 function resetEntry(){
   ['kpi-total','kpi-sal','kpi-yield','kpi-cg','kpi-dmg','kpi-gls'].forEach(id=>document.getElementById(id).textContent='—');
-  document.getElementById('entries-body').innerHTML='<tr><td colspan="14" class="empty-state">No data yet — add entries above</td></tr>';
+  document.getElementById('entries-body').innerHTML='<tr><td colspan="15" class="empty-state">No data yet — add entries above</td></tr>';
 }
 
 /* CUMULATIVE REPORT */
@@ -1416,7 +1424,7 @@ function renderReport(){
   const filtered=getFilteredRows();
   updateAsAt();
   const rt=filtered.reduce((s,r)=>s+r.total,0),rs=filtered.reduce((s,r)=>s+r.sal,0),
-        rc=filtered.reduce((s,r)=>s+r.cg,0),rd=filtered.reduce((s,r)=>s+r.saldmg+r.cutdmg,0),ry=rt>0?rs/rt*100:0;
+        rc=filtered.reduce((s,r)=>s+r.cg,0),rd=filtered.reduce((s,r)=>s+r.saldmg+r.cutdmg+(r.crushdmg||0),0),ry=rt>0?rs/rt*100:0;
   document.getElementById('rk-total').textContent=fmt(rt);
   document.getElementById('rk-sal').textContent=fmt(rs);
   document.getElementById('rk-cg').textContent=fmt(rc);
@@ -1509,12 +1517,13 @@ function buildCharts(){
   const txG=aggRows(cr,r=>r.tex).sort((a,b)=>a.key<b.key?-1:1);
   makeBar('chart-tex',txG.map(g=>'Tex '+g.key),txG.map(g=>+g.yield.toFixed(2)));
   const totSal=cr.reduce((s,r)=>s+r.sal,0),totCg=cr.reduce((s,r)=>s+r.cg,0),
-        totSalD=cr.reduce((s,r)=>s+r.saldmg,0),totCutD=cr.reduce((s,r)=>s+r.cutdmg,0);
+        totSalD=cr.reduce((s,r)=>s+r.saldmg,0),totCutD=cr.reduce((s,r)=>s+r.cutdmg,0),
+        totCrushD=cr.reduce((s,r)=>s+(r.crushdmg||0),0);
   const bCtx=document.getElementById('chart-breakdown');if(!bCtx)return;
   if(charts['chart-breakdown'])charts['chart-breakdown'].destroy();
   charts['chart-breakdown']=new Chart(bCtx,{type:'doughnut',
-    data:{labels:['Saleable','C Grade','Sal. Damage','Cut & Damage'],
-          datasets:[{data:[totSal,totCg,totSalD,totCutD],backgroundColor:['#0DD171','#f97316','#09b85e','#ef4444'],borderColor:'#f0f4f9',borderWidth:3}]},
+    data:{labels:['Saleable','C Grade','Sal. Damage','Cut Damage','Crush Damage'],
+          datasets:[{data:[totSal,totCg,totSalD,totCutD,totCrushD],backgroundColor:['#0DD171','#f97316','#09b85e','#ef4444','#a855f7'],borderColor:'#f0f4f9',borderWidth:3}]},
     options:{responsive:true,maintainAspectRatio:true,cutout:'60%',
       plugins:{legend:{position:'bottom',labels:{color:'#5a6480',font:{family:"'DM Sans'",size:12},padding:16}},
                tooltip:{backgroundColor:'#fff',borderColor:'#dce2ed',borderWidth:1,bodyColor:'#1a1f2e',titleColor:'#0DD171',cornerRadius:8,padding:10}}}});
@@ -1649,7 +1658,7 @@ function renderTypeYield(){
     map[t].total+=+r.total||0;
     map[t].sal+=+r.sal||0;
     map[t].cg+=+r.cg||0;
-    map[t].dmg+=(+r.saldmg||0)+(+r.cutdmg||0);
+    map[t].dmg+=(+r.saldmg||0)+(+r.cutdmg||0)+(+r.crushdmg||0);
     map[t].count++;
   });
   tyData=Object.values(map).sort((a,b)=>a.type.localeCompare(b.type));
