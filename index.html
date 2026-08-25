@@ -1341,7 +1341,14 @@ async function loadFromSheet(){
     const res=await fetch(SHEET_URL);
     const json=await res.json();
     if(json.status==='ok'){
-      rows=json.data.map(r=>({...r,gl:String(r.gl),sal:+r.sal,cg:+r.cg,saldmg:+r.saldmg,cutdmg:+r.cutdmg,crushdmg:+r.crushdmg||0,total:+r.total,yield:+r.total>0?(+r.sal/+r.total)*100:0}));
+      rows=json.data.map(r=>{
+        const sal=+r.sal||0, cg=+r.cg||0, saldmg=+r.saldmg||0, cutdmg=+r.cutdmg||0, total=+r.total||0;
+        // Backward-compatible fallback: older Apps Script deployments may omit crushdmg
+        // even though Total already includes it. Recover it from the production balance.
+        const hasCrush=r.crushdmg!==undefined && r.crushdmg!==null && r.crushdmg!=='';
+        const crushdmg=hasCrush ? (+r.crushdmg||0) : Math.max(0,total-sal-cg-saldmg-cutdmg);
+        return {...r,gl:String(r.gl),sal,cg,saldmg,cutdmg,crushdmg,total,yield:total>0?(sal/total)*100:0};
+      });
       // Merge extra types from TypeList sheet into autocomplete
       if(json.extraTypes&&json.extraTypes.length){
         json.extraTypes.forEach(t=>{
@@ -1565,6 +1572,27 @@ function buildCharts(){
       };
     })},
     options:{...cCfg,scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
+
+  // ── GL-Wise Total Damage % ───────────────────────────────────────────────
+  const dmgTooltip={...cCfg.plugins.tooltip,callbacks:{label:ctx=>ctx.parsed.y.toFixed(2)+'%'}};
+  const dmgOpts={...cCfg,plugins:{...cCfg.plugins,legend:{display:false},tooltip:dmgTooltip},scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}};
+  const glDmgCtx=document.getElementById('chart-gl-dmg');
+  if(glDmgCtx){
+    if(charts['chart-gl-dmg'])charts['chart-gl-dmg'].destroy();
+    const glDmgData=glG.map(g=>+(g.total>0?(g.saldmg+g.cutdmg+g.crushdmg)/g.total*100:0).toFixed(2));
+    charts['chart-gl-dmg']=new Chart(glDmgCtx,{type:'bar',
+      data:{labels:glG.map(g=>g.key),datasets:[{data:glDmgData,backgroundColor:glDmgData.map(v=>v>10?'#ef4444':v>5?'#f97316':'#22c55e'),borderRadius:6,borderSkipped:false}]},
+      options:dmgOpts});
+  }
+  // ── GL-Wise Crush Damage % ───────────────────────────────────────────────
+  const glCrushCtx=document.getElementById('chart-gl-crush');
+  if(glCrushCtx){
+    if(charts['chart-gl-crush'])charts['chart-gl-crush'].destroy();
+    const glCrushData=glG.map(g=>+(g.total>0?g.crushdmg/g.total*100:0).toFixed(2));
+    charts['chart-gl-crush']=new Chart(glCrushCtx,{type:'bar',
+      data:{labels:glG.map(g=>g.key),datasets:[{data:glCrushData,backgroundColor:glCrushData.map(v=>v>10?'#a855f7':v>5?'#f97316':'#22c55e'),borderRadius:6,borderSkipped:false}]},
+      options:dmgOpts});
+  }
 }
 
 
