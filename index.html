@@ -1575,14 +1575,21 @@ function buildCharts(){
 
   // ── GL-Wise Total Damage % ───────────────────────────────────────────────
   const dmgTooltip={...cCfg.plugins.tooltip,callbacks:{label:ctx=>ctx.parsed.y.toFixed(2)+'%'}};
-  const dmgOpts={...cCfg,plugins:{...cCfg.plugins,legend:{display:false},tooltip:dmgTooltip},scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}};
+  const dynamicDamageOptions=(data)=>{
+    const highest=data.length?Math.max(...data):0;
+    const axisMax=Math.max(1,+(highest+1).toFixed(2)); // always 1 percentage point above current maximum
+    return {...cCfg,
+      plugins:{...cCfg.plugins,legend:{display:false},tooltip:dmgTooltip},
+      scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:axisMax,ticks:{...cCfg.scales.y.ticks,callback:v=>v+'%'}}}
+    };
+  };
   const glDmgCtx=document.getElementById('chart-gl-dmg');
   if(glDmgCtx){
     if(charts['chart-gl-dmg'])charts['chart-gl-dmg'].destroy();
     const glDmgData=glG.map(g=>+(g.total>0?(g.saldmg+g.cutdmg+g.crushdmg)/g.total*100:0).toFixed(2));
     charts['chart-gl-dmg']=new Chart(glDmgCtx,{type:'bar',
       data:{labels:glG.map(g=>g.key),datasets:[{data:glDmgData,backgroundColor:glDmgData.map(v=>v>10?'#ef4444':v>5?'#f97316':'#22c55e'),borderRadius:6,borderSkipped:false}]},
-      options:dmgOpts});
+      options:dynamicDamageOptions(glDmgData)});
   }
   // ── GL-Wise Crush Damage % ───────────────────────────────────────────────
   const glCrushCtx=document.getElementById('chart-gl-crush');
@@ -1591,7 +1598,7 @@ function buildCharts(){
     const glCrushData=glG.map(g=>+(g.total>0?g.crushdmg/g.total*100:0).toFixed(2));
     charts['chart-gl-crush']=new Chart(glCrushCtx,{type:'bar',
       data:{labels:glG.map(g=>g.key),datasets:[{data:glCrushData,backgroundColor:glCrushData.map(v=>v>10?'#a855f7':v>5?'#f97316':'#22c55e'),borderRadius:6,borderSkipped:false}]},
-      options:dmgOpts});
+      options:dynamicDamageOptions(glCrushData)});
   }
 }
 
