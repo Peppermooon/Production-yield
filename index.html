@@ -1520,7 +1520,7 @@ function resetEntry(){
 
 /* CUMULATIVE REPORT */
 function renderReport(){
-  const filtered=getFilteredRows();
+  const filtered=getReportRows();
   updateAsAt();
   const rt=filtered.reduce((s,r)=>s+r.total,0),rs=filtered.reduce((s,r)=>s+r.sal,0),
         rc=filtered.reduce((s,r)=>s+r.cg,0),rd=filtered.reduce((s,r)=>s+r.saldmg+r.cutdmg+(r.crushdmg||0),0),ry=rt>0?rs/rt*100:0;
@@ -1922,6 +1922,34 @@ function getFilteredRows(){
     return true;
   });
 }
+// Summary Report month fallback:
+// If the current month has no records yet, show the latest previous month's
+// records instead. As soon as the first current-month record exists, the
+// Summary Report automatically switches to the current month.
+function getReportRows(){
+  // An explicit user date range always takes priority.
+  if(isRangeActive()) return getFilteredRows();
+
+  const currentMonthRows=getFilteredRows();
+  if(currentMonthRows.length) return currentMonthRows;
+
+  // No records in the current month yet: find the latest recorded date
+  // up to today and show that complete recorded month.
+  const now=new Date();
+  const todayStr=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  const priorDates=rows
+    .map(r=>normDateStr(r.date))
+    .filter(d=>d && d<=todayStr)
+    .sort();
+
+  if(!priorDates.length) return [];
+  const latestMonth=priorDates[priorDates.length-1].slice(0,7);
+  return rows.filter(r=>{
+    const d=normDateStr(r.date);
+    return d && d.slice(0,7)===latestMonth && d<=todayStr;
+  });
+}
+
 function syncRangeInputs(){
   document.querySelectorAll('.rng-from').forEach(el=>{ el.value=_rngFrom; });
   document.querySelectorAll('.rng-to').forEach(el=>{ el.value=_rngTo; });
@@ -2000,7 +2028,7 @@ async function saveTypeToList(type){
 
 /* EXPORT REPORT CSV */
 function exportReportCSV(){
-  const filtered=getFilteredRows();
+  const filtered=getReportRows();
   if(!filtered.length){alert('No data to export.');return;}
   const f=v=>(+v||0).toFixed(1);
   const fp=v=>(+v||0).toFixed(1)+'%';
