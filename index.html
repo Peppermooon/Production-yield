@@ -1037,8 +1037,11 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   <div class="card remark-entry">
     <div class="card-title">Add Remarks</div>
     <textarea id="remark-input" maxlength="500" placeholder="Enter an information message to show on the Summary Report…"></textarea>
-    <div class="remark-help">Saving a new remark replaces the current active remark. Viewers can dismiss it individually by pressing OK.</div>
-    <button class="btn btn-primary" id="btn-save-remark" onclick="saveRemark()">Save Remark</button>
+    <div class="remark-help">Only one remark is active on the dashboard at a time. Saving a new remark keeps older remarks in the Remarks sheet as history. Use “Remove from Dashboard” to hide the active remark for all viewers without deleting its record.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btn-save-remark" onclick="saveRemark()">Save Remark</button>
+      <button class="btn btn-outline" id="btn-remove-remark" onclick="removeRemarkFromDashboard()">Remove from Dashboard</button>
+    </div>
   </div>
 
   <div class="date-range-bar">
@@ -1424,6 +1427,27 @@ async function saveRemark(){
   }
 }
 
+async function removeRemarkFromDashboard(){
+  const btn=document.getElementById('btn-remove-remark');
+  if(!confirm('Remove the current remark from the Summary Report for all viewers? The remark record will remain in Google Sheets.')) return;
+  btn.disabled=true; btn.textContent='Removing…';
+  setStatus('Removing remark from dashboard…','spin');
+  try{
+    const res=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify({action:'removeRemark'})});
+    const json=await res.json();
+    if(json.status==='ok'){
+      renderRemarkNotice(null);
+      setStatus(json.removed ? '✓ Remark removed from dashboard' : 'No active remark to remove','ok');
+    }else{
+      setStatus('⚠ '+(json.message||'Could not remove remark'),'err');
+    }
+  }catch(e){
+    setStatus('✗ Network error while removing remark','err');
+  }finally{
+    btn.disabled=false; btn.textContent='Remove from Dashboard';
+  }
+}
+
 /* LOAD FROM SHEET */
 async function loadFromSheet(){
   setStatus('Loading from Google Sheets…','spin');
@@ -1606,70 +1630,174 @@ function makeBar(id,labels,data){
     data:{labels,datasets:[{data,backgroundColor:bg,borderRadius:6,borderSkipped:false}]},
     options:{...cCfg,plugins:{...cCfg.plugins,legend:{display:false}},scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
 }
+function getDynamicYieldAxis(values){
+  const nums=values.flat(Infinity).filter(v=>v!==null&&v!==undefined&&Number.isFinite(Number(v))).map(Number);
+  if(!nums.length)return{min:0,max:100};
+  const lo=Math.min(...nums),hi=Math.max(...nums);
+  // Add ~1 percentage point breathing room, then round to clean 5-point boundaries.
+  // Example: 86–91% becomes 85–95%.
+  let min=Math.floor((lo-1)/5)*5;
+  let max=Math.ceil((hi+1)/5)*5;
+  min=Math.max(0,min);
+  max=Math.min(100,max);
+  // Keep at least a 5 percentage-point visible span.
+  if(max-min<5){
+    if(max<100)max=Math.min(100,min+5);
+    else min=Math.max(0,max-5);
+  }
+  return{min,max};
+}
+function yieldLineOptions(values){
+  const axis=getDynamicYieldAxis(values);
+  return{
+    ...cCfg,
+    plugins:{
+      ...cCfg.plugins,
+      tooltip:{...cCfg.plugins.tooltip,callbacks:{label:ctx=>ctx.dataset.label+': '+Number(ctx.parsed.y).toFixed(1)+'%'}}
+    },
+    scales:{
+      ...cCfg.scales,
+      y:{...cCfg.scales.y,min:axis.min,max:axis.max,ticks:{...cCfg.scales.y.ticks,callback:v=>Number(v).toFixed(1)+'%'}}
+    }
+  };
+}
+function isoDateList(from,to){
+  if(!from||!to||from>to)return[];
+  const out=[];
+  const [fy,fm,fd]=from.split('-').map(Number),[ty,tm,td]=to.split('-').map(Number);
+  let d=new Date(Date.UTC(fy,fm-1,fd)),end=new Date(Date.UTC(ty,tm-1,td));
+  while(d<=end){
+    out.push(d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0'));
+    d.setUTCDate(d.getUTCDate()+1);
+  }
+  return out;
+}
+function isoLabel(v){
+  if(!v)return'—';
+  const p=String(v).slice(0,10).split('-');
+  return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:String(v);
+}
 function buildCharts(){
   const cr=getFilteredRows();
-  if(!cr.length)return;
   const glG=aggRows(cr,r=>'GL '+r.gl).sort((a,b)=>a.key<b.key?-1:1);
   makeBar('chart-gl',glG.map(g=>g.key),glG.map(g=>+g.yield.toFixed(1)));
   const knG=aggRows(cr,r=>r.kiln).sort((a,b)=>a.key<b.key?-1:1);
   makeBar('chart-kiln',knG.map(g=>g.key),knG.map(g=>+g.yield.toFixed(1)));
   const txG=aggRows(cr,r=>r.tex).sort((a,b)=>a.key<b.key?-1:1);
   makeBar('chart-tex',txG.map(g=>'Tex '+g.key),txG.map(g=>+g.yield.toFixed(1)));
+
   const totSal=cr.reduce((s,r)=>s+r.sal,0),totCg=cr.reduce((s,r)=>s+r.cg,0),
         totSalD=cr.reduce((s,r)=>s+r.saldmg,0),totCutD=cr.reduce((s,r)=>s+r.cutdmg,0),
         totCrushD=cr.reduce((s,r)=>s+(r.crushdmg||0),0);
-  const bCtx=document.getElementById('chart-breakdown');if(!bCtx)return;
-  if(charts['chart-breakdown'])charts['chart-breakdown'].destroy();
-  charts['chart-breakdown']=new Chart(bCtx,{type:'doughnut',
-    data:{labels:['Saleable','C Grade','Sal. Damage','Cut Damage','Crush Damage'],
-          datasets:[{data:[totSal,totCg,totSalD,totCutD,totCrushD],backgroundColor:['#0DD171','#f97316','#09b85e','#ef4444','#a855f7'],borderColor:'#f0f4f9',borderWidth:3}]},
-    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',
-      plugins:{legend:{position:'bottom',labels:{color:'#5a6480',font:{family:"'DM Sans'",size:12},padding:16}},
-               tooltip:{backgroundColor:'#fff',borderColor:'#dce2ed',borderWidth:1,bodyColor:'#1a1f2e',titleColor:'#0DD171',cornerRadius:8,padding:10,callbacks:{label:ctx=>ctx.label+': '+Number(ctx.parsed||0).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}}}}});
-  const fmtD=v=>{if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v).slice(0,10);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();};
-  const rawDates=[...new Set(cr.map(r=>r.date))].sort();
-  const dates=rawDates.map(fmtD); // formatted labels for x-axis
-  const gls=[...new Set(cr.map(r=>r.gl))].sort();
-  const dgMap={};
-  // Key by rawDate so lookup stays consistent
-  cr.forEach(r=>{const k=r.date+'|'+r.gl;if(!dgMap[k])dgMap[k]={sal:0,total:0};dgMap[k].sal+=r.sal;dgMap[k].total+=r.total;});
-  const tCtx=document.getElementById('chart-trend');if(!tCtx)return;
-  if(charts['chart-trend'])charts['chart-trend'].destroy();
-  charts['chart-trend']=new Chart(tCtx,{type:'line',
-    data:{labels:dates,datasets:gls.map((gl,i)=>({
-      label:'GL '+gl,
-      data:rawDates.map(d=>{const k=d+'|'+gl;return dgMap[k]&&dgMap[k].total>0?+(dgMap[k].sal/dgMap[k].total*100).toFixed(1):null;}),
-      borderColor:COLORS[i%COLORS.length],backgroundColor:COLORS[i%COLORS.length]+'18',
-      tension:0.35,pointRadius:5,pointHoverRadius:7,borderWidth:2.5,spanGaps:false}))},
-    options:{...cCfg,scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
+  const bCtx=document.getElementById('chart-breakdown');
+  if(bCtx){
+    if(charts['chart-breakdown'])charts['chart-breakdown'].destroy();
+    charts['chart-breakdown']=new Chart(bCtx,{type:'doughnut',
+      data:{labels:['Saleable','C Grade','Sal. Damage','Cut Damage','Crush Damage'],
+            datasets:[{data:[totSal,totCg,totSalD,totCutD,totCrushD],backgroundColor:['#0DD171','#f97316','#09b85e','#ef4444','#a855f7'],borderColor:'#f0f4f9',borderWidth:3}]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'60%',
+        plugins:{legend:{position:'bottom',labels:{color:'#5a6480',font:{family:"'DM Sans'",size:12},padding:16}},
+                 tooltip:{backgroundColor:'#fff',borderColor:'#dce2ed',borderWidth:1,bodyColor:'#1a1f2e',titleColor:'#0DD171',cornerRadius:8,padding:10,callbacks:{label:ctx=>ctx.label+': '+Number(ctx.parsed||0).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}}}}});
+  }
+
+  // ── Daily GL Yield Trend ───────────────────────────────────────────────────
+  // Daily chart still follows the selected date range/current-month filter.
+  const dailyDates=[...new Set(cr.map(r=>normDateStr(r.date)).filter(Boolean))].sort();
+  const dailyGLs=[...new Set(cr.map(r=>String(r.gl)))].sort();
+  const dailyMap={};
+  cr.forEach(r=>{
+    const d=normDateStr(r.date),k=d+'|'+String(r.gl);
+    if(!d)return;
+    if(!dailyMap[k])dailyMap[k]={sal:0,total:0};
+    dailyMap[k].sal+=+r.sal||0;dailyMap[k].total+=+r.total||0;
+  });
+  const dailyDatasets=dailyGLs.map((gl,i)=>({
+    label:'GL '+gl,
+    data:dailyDates.map(d=>{const x=dailyMap[d+'|'+gl];return x&&x.total>0?+(x.sal/x.total*100).toFixed(1):null;}),
+    borderColor:COLORS[i%COLORS.length],backgroundColor:COLORS[i%COLORS.length]+'18',
+    tension:0.35,pointRadius:5,pointHoverRadius:7,borderWidth:2.5,spanGaps:false
+  }));
+  const tCtx=document.getElementById('chart-trend');
+  if(tCtx){
+    if(charts['chart-trend'])charts['chart-trend'].destroy();
+    charts['chart-trend']=new Chart(tCtx,{type:'line',
+      data:{labels:dailyDates.map(isoLabel),datasets:dailyDatasets},
+      options:yieldLineOptions(dailyDatasets.map(ds=>ds.data))});
+  }
 
   // ── Cumulative GL Yield Variation ──────────────────────────────────────────
-  // For each date, compute running cumulative yield per GL up to that date
-  const cCtx=document.getElementById('chart-cumul');if(!cCtx)return;
-  if(charts['chart-cumul'])charts['chart-cumul'].destroy();
-  charts['chart-cumul']=new Chart(cCtx,{type:'line',
-    data:{labels:dates,datasets:gls.map((gl,i)=>{
-      let cumSal=0,cumTotal=0;
-      const data=rawDates.map(d=>{
-        const k=d+'|'+gl;
-        if(dgMap[k]){cumSal+=dgMap[k].sal;cumTotal+=dgMap[k].total;}
-        return cumTotal>0?+(cumSal/cumTotal*100).toFixed(1):null;
-      });
-      return{
-        label:'GL '+gl,
-        data,
-        borderColor:COLORS[i%COLORS.length],
-        backgroundColor:COLORS[i%COLORS.length]+'18',
-        tension:0.35,pointRadius:5,pointHoverRadius:7,borderWidth:2.5,spanGaps:false
-      };
-    })},
-    options:{...cCfg,scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:100}}}});
+  // IMPORTANT: cumulative yield is calculated from the START OF EACH MONTH
+  // using ALL production records. The selected date range only decides which
+  // already-calculated cumulative points are displayed; it never restarts the
+  // cumulative calculation at the range start.
+  const today=new Date();
+  const todayISO=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  let cumulFrom,cumulTo;
+  if(isRangeActive()){
+    const filteredDates=cr.map(r=>normDateStr(r.date)).filter(Boolean).sort();
+    cumulFrom=_rngFrom || (filteredDates[0]||'');
+    cumulTo=_rngTo || (filteredDates[filteredDates.length-1]||todayISO);
+  }else{
+    cumulFrom=todayISO.slice(0,7)+'-01';
+    cumulTo=todayISO;
+  }
+  const cumulDates=isoDateList(cumulFrom,cumulTo);
+
+  // Aggregate ALL records by normalized date + GL. This is deliberately not `cr`.
+  const allDaily={};
+  rows.forEach(r=>{
+    const d=normDateStr(r.date),gl=String(r.gl);
+    if(!d||!gl)return;
+    const k=d+'|'+gl;
+    if(!allDaily[k])allDaily[k]={sal:0,total:0};
+    allDaily[k].sal+=+r.sal||0;allDaily[k].total+=+r.total||0;
+  });
+
+  // Candidate GLs come from the months shown, including production before the
+  // selected start date because that earlier production determines the true cumulative yield.
+  const shownMonths=[...new Set(cumulDates.map(d=>d.slice(0,7)))];
+  const cumulGLs=[...new Set(rows.filter(r=>shownMonths.includes(normDateStr(r.date).slice(0,7))).map(r=>String(r.gl)))].sort();
+
+  const cumulDatasets=cumulGLs.map((gl,i)=>{
+    let currentMonth='',cumSal=0,cumTotal=0;
+    const data=cumulDates.map(d=>{
+      const month=d.slice(0,7);
+      if(month!==currentMonth){
+        currentMonth=month;cumSal=0;cumTotal=0;
+        // Seed with all production from the month start up to the day BEFORE
+        // the first displayed day. This preserves the true monthly cumulative.
+        rows.forEach(r=>{
+          const rd=normDateStr(r.date);
+          if(String(r.gl)===gl && rd.slice(0,7)===month && rd<d){
+            cumSal+=+r.sal||0;cumTotal+=+r.total||0;
+          }
+        });
+      }
+      const x=allDaily[d+'|'+gl];
+      if(x){cumSal+=x.sal;cumTotal+=x.total;}
+      // If there is no production today, the previous cumulative yield carries forward.
+      return cumTotal>0?+(cumSal/cumTotal*100).toFixed(1):null;
+    });
+    return{
+      label:'GL '+gl,data,
+      borderColor:COLORS[i%COLORS.length],backgroundColor:COLORS[i%COLORS.length]+'18',
+      tension:0.35,pointRadius:5,pointHoverRadius:7,borderWidth:2.5,spanGaps:false
+    };
+  }).filter(ds=>ds.data.some(v=>v!==null));
+
+  const cCtx=document.getElementById('chart-cumul');
+  if(cCtx){
+    if(charts['chart-cumul'])charts['chart-cumul'].destroy();
+    charts['chart-cumul']=new Chart(cCtx,{type:'line',
+      data:{labels:cumulDates.map(isoLabel),datasets:cumulDatasets},
+      options:yieldLineOptions(cumulDatasets.map(ds=>ds.data))});
+  }
 
   // ── GL-Wise Total Damage % ───────────────────────────────────────────────
   const dmgTooltip={...cCfg.plugins.tooltip,callbacks:{label:ctx=>ctx.parsed.y.toFixed(1)+'%'}};
   const dynamicDamageOptions=(data)=>{
     const highest=data.length?Math.max(...data):0;
-    const axisMax=Math.max(1,+(highest+1).toFixed(1)); // always 1 percentage point above current maximum
+    const axisMax=Math.max(1,+(highest+1).toFixed(1));
     return {...cCfg,
       plugins:{...cCfg.plugins,legend:{display:false},tooltip:dmgTooltip},
       scales:{...cCfg.scales,y:{...cCfg.scales.y,min:0,max:axisMax,ticks:{...cCfg.scales.y.ticks,callback:v=>Number(v).toFixed(1)+'%'}}}
@@ -1693,7 +1821,6 @@ function buildCharts(){
       options:dynamicDamageOptions(glCrushData)});
   }
 }
-
 
 /* ── DATE HELPERS ─────────────────────────────────── */
 function fmtDateLocal(v){
