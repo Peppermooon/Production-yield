@@ -1263,6 +1263,7 @@ function deriveSize(t){
   if(u.startsWith('FAP'))return'600×300'+p;
   if(u.startsWith('FAX'))return'500×500';
   if(u.startsWith('FAY'))return'600×600'+p;
+  if(u.startsWith('FAT'))return'400×400';
   return'—';
 }
 function deriveCat(t){if(!t)return'';const u=t.toUpperCase();return(u.includes('CERA')||u.includes('FCLT'))?'Ceramics':'Porcelain';}
