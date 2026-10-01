@@ -1702,8 +1702,12 @@ function buildCharts(){
   }
 
   // ── Daily GL Yield Trend ───────────────────────────────────────────────────
-  // Daily chart still follows the selected date range/current-month filter.
-  const dailyDates=[...new Set(cr.map(r=>normDateStr(r.date)).filter(Boolean))].sort();
+  // Automatic daily analysis covers the reporting month through yesterday.
+  // Explicit date ranges retain their existing behavior.
+  const reportPeriod=getReportingPeriod();
+  const dailyDates=isRangeActive()
+    ? [...new Set(cr.map(r=>normDateStr(r.date)).filter(Boolean))].sort()
+    : isoDateList(reportPeriod.from,reportPeriod.to);
   const dailyGLs=[...new Set(cr.map(r=>String(r.gl)))].sort();
   const dailyMap={};
   cr.forEach(r=>{
@@ -1731,16 +1735,14 @@ function buildCharts(){
   // using ALL production records. The selected date range only decides which
   // already-calculated cumulative points are displayed; it never restarts the
   // cumulative calculation at the range start.
-  const today=new Date();
-  const todayISO=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   let cumulFrom,cumulTo;
   if(isRangeActive()){
     const filteredDates=cr.map(r=>normDateStr(r.date)).filter(Boolean).sort();
     cumulFrom=_rngFrom || (filteredDates[0]||'');
-    cumulTo=_rngTo || (filteredDates[filteredDates.length-1]||todayISO);
+    cumulTo=_rngTo || (filteredDates[filteredDates.length-1]||reportPeriod.to);
   }else{
-    cumulFrom=todayISO.slice(0,7)+'-01';
-    cumulTo=todayISO;
+    cumulFrom=reportPeriod.from;
+    cumulTo=reportPeriod.to;
   }
   const cumulDates=isoDateList(cumulFrom,cumulTo);
 
@@ -1776,7 +1778,7 @@ function buildCharts(){
       }
       const x=allDaily[d+'|'+gl];
       if(x){cumSal+=x.sal;cumTotal+=x.total;}
-      // If there is no production today, the previous cumulative yield carries forward.
+      // If a day has no production, the previous cumulative yield carries forward.
       return cumTotal>0?+(cumSal/cumTotal*100).toFixed(1):null;
     });
     return{
@@ -2026,6 +2028,17 @@ function acHighlight(items){
 /* ═══ DATE RANGE FILTER ═══ */
 let _rngFrom='', _rngTo='';
 function isRangeActive(){ return !!_rngFrom || !!_rngTo; }
+// Use yesterday's local calendar date, including month/year rollovers.
+// Calendar subtraction also avoids daylight-saving errors from subtracting 24 hours.
+function getReportingPeriod(now=new Date()){
+  const yesterday=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  yesterday.setDate(yesterday.getDate()-1);
+  const monthKey=yesterday.getFullYear()+'-'+String(yesterday.getMonth()+1).padStart(2,'0');
+  return {
+    from:monthKey+'-01',
+    to:monthKey+'-'+String(yesterday.getDate()).padStart(2,'0')
+  };
+}
 function getFilteredRows(){
   if(_rngFrom || _rngTo){
     return rows.filter(r=>{
@@ -2036,46 +2049,16 @@ function getFilteredRows(){
       return true;
     });
   }
-  // Default: current month, up to and including TODAY
-  const now=new Date();
-  const curYear=now.getFullYear();
-  const curMonth=String(now.getMonth()+1).padStart(2,'0');
-  const monthPrefix=curYear+'-'+curMonth;
-  const todayStr=curYear+'-'+curMonth+'-'+String(now.getDate()).padStart(2,'0');
+  // Default: the month containing yesterday, through yesterday inclusive.
+  const period=getReportingPeriod();
   return rows.filter(r=>{
     const d=normDateStr(r.date);
-    if(!d) return false;
-    if(!d.startsWith(monthPrefix)) return false;
-    if(d>todayStr) return false;
-    return true;
+    return d && d>=period.from && d<=period.to;
   });
 }
-// Summary Report month fallback:
-// If the current month has no records yet, show the latest previous month's
-// records instead. As soon as the first current-month record exists, the
-// Summary Report automatically switches to the current month.
+// Summary, charts and type analysis use the same automatic reporting period.
 function getReportRows(){
-  // An explicit user date range always takes priority.
-  if(isRangeActive()) return getFilteredRows();
-
-  const currentMonthRows=getFilteredRows();
-  if(currentMonthRows.length) return currentMonthRows;
-
-  // No records in the current month yet: find the latest recorded date
-  // up to today and show that complete recorded month.
-  const now=new Date();
-  const todayStr=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-  const priorDates=rows
-    .map(r=>normDateStr(r.date))
-    .filter(d=>d && d<=todayStr)
-    .sort();
-
-  if(!priorDates.length) return [];
-  const latestMonth=priorDates[priorDates.length-1].slice(0,7);
-  return rows.filter(r=>{
-    const d=normDateStr(r.date);
-    return d && d.slice(0,7)===latestMonth && d<=todayStr;
-  });
+  return getFilteredRows();
 }
 
 function syncRangeInputs(){
@@ -2117,12 +2100,8 @@ function normDateStr(v){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function getLastEntryDate(){
-  const nowMonth=new Date();
-  const curMonthKey=nowMonth.getFullYear()+'-'+String(nowMonth.getMonth()+1).padStart(2,'0');
-  const monthDates=rows.map(r=>normDateStr(r.date)).filter(d=>d&&d.slice(0,7)===curMonthKey).sort();
-  if(monthDates.length) return monthDates[monthDates.length-1];
-  const allDates=rows.map(r=>normDateStr(r.date)).filter(Boolean).sort();
-  return allDates.length ? allDates[allDates.length-1] : null;
+  const dates=getReportRows().map(r=>normDateStr(r.date)).filter(Boolean).sort();
+  return dates.length ? dates[dates.length-1] : null;
 }
 function updateHeaderTitle(){ updateAsAt(); }
 function updateAsAt(){
