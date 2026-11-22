@@ -922,9 +922,54 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   .remark-notice .btn{padding:7px 12px;font-size:12px;}
 }
 
+
+/* ═══ INITIAL DATA LOADING SCREEN ═══ */
+#initial-loader {
+  position:fixed; inset:0; z-index:99999; display:flex; align-items:center; justify-content:center;
+  padding:24px; background:linear-gradient(145deg,#f0f4f9 0%,#e7f8ef 100%);
+  font-family:var(--body); text-align:center;
+}
+#initial-loader .loader-card {
+  width:min(100%,420px); padding:38px 30px; background:#fff; border:1px solid var(--border);
+  border-radius:20px; box-shadow:0 18px 55px rgba(7,80,45,.12);
+}
+#initial-loader .loader-mark {
+  width:62px; height:62px; margin:0 auto 20px; display:grid; place-items:center;
+  border-radius:18px; color:#087a40; background:#e7f9ef; font-size:30px;
+}
+#initial-loader h2 { color:#1a1f2e; font-size:20px; font-weight:700; margin-bottom:8px; }
+#initial-loader p { color:#5a6480; font-size:13px; line-height:1.6; }
+#initial-loader .loader-spinner {
+  width:34px; height:34px; margin:24px auto 14px; border:3px solid #dcefe4;
+  border-top-color:#09b85e; border-radius:50%; animation:loader-spin .8s linear infinite;
+}
+#initial-loader .loader-progress { height:5px; width:100%; overflow:hidden; border-radius:99px; background:#e8f1eb; margin:18px 0 12px; }
+#initial-loader .loader-progress::after { content:''; display:block; width:38%; height:100%; border-radius:99px; background:#0DD171; animation:loader-progress 1.5s ease-in-out infinite; }
+#initial-loader .loader-status { color:#087a40; font-size:12px; font-weight:600; }
+#initial-loader .loader-retry { display:none; margin-top:20px; padding:11px 22px; border:0; border-radius:9px; background:#087a40; color:#fff; font:600 13px var(--body); cursor:pointer; }
+#initial-loader.failed .loader-spinner, #initial-loader.failed .loader-progress { display:none; }
+#initial-loader.failed .loader-retry { display:inline-block; }
+@keyframes loader-spin { to { transform:rotate(360deg); } }
+@keyframes loader-progress { 0% { transform:translateX(-110%); } 100% { transform:translateX(280%); } }
+@media(max-width:500px) { #initial-loader .loader-card { padding:32px 22px; } #initial-loader h2 { font-size:18px; } }
+
 </style>
 </head>
 <body>
+
+<!-- ═══ INITIAL DATA LOADING SCREEN ═══ -->
+<div id="initial-loader" role="status" aria-live="polite">
+  <div class="loader-card">
+    <div class="loader-mark">▥</div>
+    <h2>Production Yield Dashboard</h2>
+    <p id="loader-message">Connecting to the production database and fetching the latest records.</p>
+    <div class="loader-spinner" aria-hidden="true"></div>
+    <div class="loader-progress" aria-hidden="true"></div>
+    <div class="loader-status" id="loader-status">Preparing your dashboard…</div>
+    <button class="loader-retry" id="loader-retry" onclick="retryInitialLoad()">Try Again</button>
+  </div>
+</div>
+
 
 <!-- ═══ PIN LOCK MODAL ═══ -->
 <div class="pin-overlay" id="pin-overlay">
@@ -1454,6 +1499,7 @@ async function loadFromSheet(){
   setStatus('Loading from Google Sheets…','spin');
   try{
     const res=await fetch(SHEET_URL);
+    if(!res.ok) throw new Error('Server returned '+res.status);
     const json=await res.json();
     if(json.status==='ok'){
       rows=json.data.map(r=>{
@@ -1483,8 +1529,15 @@ async function loadFromSheet(){
       const tyPage=document.getElementById('page-typeyield');
       if(tyPage&&tyPage.classList.contains('active')) renderTypeYield();
       setStatus('✓ Synced — '+rows.length+' records','ok');
-    }else setStatus('⚠ '+json.message,'err');
-  }catch(e){setStatus('✗ Network error — check connection','err');}
+      return true;
+    }
+    setStatus('⚠ '+(json.message||'Unable to load production data'),'err');
+    return false;
+  }catch(e){
+    console.error('Initial data sync failed:',e);
+    setStatus('✗ Network error — check connection','err');
+    return false;
+  }
 }
 
 /* HELPERS */
@@ -1861,16 +1914,33 @@ function updateAsAt(){
 
 
 
-/* INIT */
+/* INIT — keep the dashboard covered until the first data sync succeeds */
+async function startInitialLoad(){
+  const loader=document.getElementById('initial-loader');
+  loader.classList.remove('failed');
+  document.getElementById('loader-message').textContent='Connecting to the production database and fetching the latest records.';
+  document.getElementById('loader-status').textContent='Preparing your dashboard…';
+  const loaded=await loadFromSheet();
+  if(loaded){
+    document.getElementById('loader-status').textContent='Data loaded successfully';
+    loader.style.opacity='0';
+    loader.style.transition='opacity .25s ease';
+    setTimeout(()=>loader.remove(),260);
+    setInterval(loadFromSheet,60000);
+  }else{
+    loader.classList.add('failed');
+    document.getElementById('loader-message').textContent='We could not retrieve the latest production data. Check your internet connection and try again.';
+    document.getElementById('loader-status').textContent='Dashboard is waiting for data';
+  }
+}
+function retryInitialLoad(){ startInitialLoad(); }
 window.onload=()=>{
   document.getElementById('f-date').value=new Date().toISOString().slice(0,10);
-  // Show today's actual date in subtitle
   const todayEl=document.getElementById('today-date');
   if(todayEl) todayEl.textContent=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
   updateHeaderTitle();
   renderReport();
-  loadFromSheet();
-  setInterval(loadFromSheet,60000);
+  startInitialLoad();
 };
 
 
