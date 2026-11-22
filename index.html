@@ -934,8 +934,8 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
   border-radius:20px; box-shadow:0 18px 55px rgba(7,80,45,.12);
 }
 #initial-loader .loader-mark {
-  width:62px; height:62px; margin:0 auto 20px; display:grid; place-items:center;
-  border-radius:18px; color:#087a40; background:#e7f9ef; font-size:30px;
+  display:block; width:76px; height:76px; margin:0 auto 20px;
+  object-fit:contain; border-radius:14px;
 }
 #initial-loader h2 { color:#1a1f2e; font-size:20px; font-weight:700; margin-bottom:8px; }
 #initial-loader p { color:#5a6480; font-size:13px; line-height:1.6; }
@@ -960,7 +960,7 @@ table.rpt tbody tr:hover td { filter: brightness(.97); }
 <!-- ═══ INITIAL DATA LOADING SCREEN ═══ -->
 <div id="initial-loader" role="status" aria-live="polite">
   <div class="loader-card">
-    <div class="loader-mark">▥</div>
+    <img class="loader-mark" src="iconyield.png" alt="Production Yield logo">
     <h2>Production Yield Dashboard</h2>
     <p id="loader-message">Connecting to the production database and fetching the latest records.</p>
     <div class="loader-spinner" aria-hidden="true"></div>
